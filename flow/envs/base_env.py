@@ -593,3 +593,6 @@ class Env(*classdef):
         except FileNotFoundError:
             print("Skip automatic termination. "
                   "Connection is probably already closed.")
+
+    def render(self):
+        pass
