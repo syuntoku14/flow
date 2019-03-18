@@ -237,9 +237,6 @@ class MultiEnv(MultiAgentEnv, Env):
         for _ in range(self.env_params.warmup_steps):
             observation, _, _, _ = self.step(rl_actions=None)
 
-        # render a frame
-        self.render(reset=True)
-
         return self.get_state()
 
     def clip_actions(self, rl_actions=None):

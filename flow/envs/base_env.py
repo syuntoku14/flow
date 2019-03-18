@@ -313,9 +313,6 @@ class Env(*classdef):
             if crash:
                 break
 
-            # render a frame
-            self.render()
-
         states = self.get_state()
 
         # collect information of the state of the network based on the
