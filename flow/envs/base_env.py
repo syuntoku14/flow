@@ -7,7 +7,6 @@ import time
 import traceback
 import numpy as np
 import random
-from flow.renderer.pyglet_renderer import PygletRenderer as Renderer
 
 import gym
 from gym.spaces import Box
@@ -154,33 +153,7 @@ class Env(*classdef):
 
         self.setup_initial_state()
 
-        # use pyglet to render the simulation
-        if self.sim_params.render in ['gray', 'dgray', 'rgb', 'drgb']:
-            save_render = self.sim_params.save_render
-            sight_radius = self.sim_params.sight_radius
-            pxpm = self.sim_params.pxpm
-            show_radius = self.sim_params.show_radius
-
-            # get network polygons
-            network = []
-            # FIXME: add to scenario kernel instead of hack
-            for lane_id in self.k.kernel_api.lane.getIDList():
-                _lane_poly = self.k.kernel_api.lane.getShape(lane_id)
-                lane_poly = [i for pt in _lane_poly for i in pt]
-                network.append(lane_poly)
-
-            # instantiate a pyglet renderer
-            self.renderer = Renderer(
-                network,
-                self.sim_params.render,
-                save_render,
-                sight_radius=sight_radius,
-                pxpm=pxpm,
-                show_radius=show_radius)
-
-            # render a frame
-            self.render(reset=True)
-        elif self.sim_params.render in [True, False]:
+        if self.sim_params.render in [True, False]:
             pass  # default to sumo-gui (if True) or sumo (if False)
         else:
             raise FatalFlowError(
@@ -493,9 +466,6 @@ class Env(*classdef):
         for _ in range(self.env_params.warmup_steps):
             observation, _, _, _ = self.step(rl_actions=None)
 
-        # render a frame
-        self.render(reset=True)
-
         return observation
 
     def additional_command(self):
@@ -620,103 +590,6 @@ class Env(*classdef):
                 "Note, this may print an error message when it closes."
             )
             self.k.close()
-
-            # close pyglet renderer
-            if self.sim_params.render in ['gray', 'dgray', 'rgb', 'drgb']:
-                self.renderer.close()
         except FileNotFoundError:
             print("Skip automatic termination. "
                   "Connection is probably already closed.")
-
-    def render(self, reset=False, buffer_length=5):
-        """Render a frame.
-
-        Parameters
-        ----------
-        reset : bool
-            set to True to reset the buffer
-        buffer_length : int
-            length of the buffer
-        """
-        if self.sim_params.render in ['gray', 'dgray', 'rgb', 'drgb']:
-            # render a frame
-            self.pyglet_render()
-
-            # cache rendering
-            if reset:
-                self.frame_buffer = [self.frame.copy() for _ in range(5)]
-                self.sights_buffer = [self.sights.copy() for _ in range(5)]
-            else:
-                if self.step_counter % int(1/self.sim_step) == 0:
-                    self.frame_buffer.append(self.frame.copy())
-                    self.sights_buffer.append(self.sights.copy())
-                if len(self.frame_buffer) > buffer_length:
-                    self.frame_buffer.pop(0)
-                    self.sights_buffer.pop(0)
-
-    def pyglet_render(self):
-        """Render a frame using pyglet."""
-        # get human and RL simulation status
-        human_idlist = self.k.vehicle.get_human_ids()
-        machine_idlist = self.k.vehicle.get_rl_ids()
-        human_logs = []
-        human_orientations = []
-        human_dynamics = []
-        machine_logs = []
-        machine_orientations = []
-        machine_dynamics = []
-        max_speed = self.k.scenario.max_speed()
-        for id in human_idlist:
-            # Force tracking human vehicles by adding "track" in vehicle id.
-            # The tracked human vehicles will be treated as machine vehicles.
-            if 'track' in id:
-                machine_logs.append(
-                    [self.k.vehicle.get_timestep(id),
-                     self.k.vehicle.get_timedelta(id),
-                     id])
-                machine_orientations.append(
-                    self.k.vehicle.get_orientation(id))
-                machine_dynamics.append(
-                    self.k.vehicle.get_speed(id)/max_speed)
-            else:
-                human_logs.append(
-                    [self.k.vehicle.get_timestep(id),
-                     self.k.vehicle.get_timedelta(id),
-                     id])
-                human_orientations.append(
-                    self.k.vehicle.get_orientation(id))
-                human_dynamics.append(
-                    self.k.vehicle.get_speed(id)/max_speed)
-        for id in machine_idlist:
-            machine_logs.append(
-                [self.k.vehicle.get_timestep(id),
-                 self.k.vehicle.get_timedelta(id),
-                 id])
-            machine_orientations.append(
-                self.k.vehicle.get_orientation(id))
-            machine_dynamics.append(
-                self.k.vehicle.get_speed(id)/max_speed)
-
-        # step the renderer
-        self.frame = self.renderer.render(human_orientations,
-                                          machine_orientations,
-                                          human_dynamics,
-                                          machine_dynamics,
-                                          human_logs,
-                                          machine_logs)
-
-        # get local observation of RL vehicles
-        self.sights = []
-        for id in human_idlist:
-            # Force tracking human vehicles by adding "track" in vehicle id.
-            # The tracked human vehicles will be treated as machine vehicles.
-            if "track" in id:
-                orientation = self.k.vehicle.get_orientation(id)
-                sight = self.renderer.get_sight(
-                    orientation, id)
-                self.sights.append(sight)
-        for id in machine_idlist:
-            orientation = self.k.vehicle.get_orientation(id)
-            sight = self.renderer.get_sight(
-                orientation, id)
-            self.sights.append(sight)
