@@ -108,6 +108,7 @@ class Env(*classdef):
         #   Entry = (type_id, route_id, lane_index, lane_pos, speed, pos)
         self.initial_state = {}
         self.state = None
+        self.is_done = False
         self.obs_var_labels = []
 
         # simulation step size
@@ -355,8 +356,11 @@ class Env(*classdef):
         # test if the environment should terminate due to a collision or the
         # time horizon being met
         done = crash or (self.time_counter >= self.env_params.warmup_steps
-                         + self.env_params.horizon)
-
+                         + self.env_params.horizon) or self.is_done
+        
+        if done:
+            self.is_done = True
+            
         # compute the info for each agent
         infos = {}
 
@@ -488,6 +492,7 @@ class Env(*classdef):
         # environment class used
         self.state = np.asarray(states).T
 
+        self.is_done = False
         # observation associated with the reset (no warm-up steps)
         observation = np.copy(states)
 
