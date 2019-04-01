@@ -39,7 +39,7 @@ parser.add_argument(
 
 # required input parameters
 parser.add_argument(
-    "--upload_dir", type=str, help="S3 Bucket to upload to.")
+    "--upload_dir", type=bool, help="S3 Bucket to upload to.")
 
 # optional input parameters
 parser.add_argument(
@@ -113,7 +113,7 @@ if __name__ == "__main__":
             "max_failures": 999,
             "stop": {"training_iteration": 500},
             "num_samples": 1,
-            "upload_dir": "s3://"+upload_dir
+            # "upload_dir": "s3://"+upload_dir
         }
 
     if upload_dir:
