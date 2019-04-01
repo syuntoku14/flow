@@ -356,7 +356,6 @@ class Env(*classdef):
         # time horizon being met
         done = crash or (self.time_counter >= self.env_params.warmup_steps
                          + self.env_params.horizon)
-
         # compute the info for each agent
         infos = {}
 
