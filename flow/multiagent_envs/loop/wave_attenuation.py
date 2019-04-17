@@ -55,11 +55,11 @@ class MultiWaveAttenuationPOEnv(MultiEnv):
     def action_space(self):
         """See class definition."""
         add_params = self.scenario.net_params.additional_params
-        num_rings = add_params['num_rings']
+        # num_rings = add_params['num_rings']
         return Box(
             low=-np.abs(self.env_params.additional_params['max_decel']),
             high=self.env_params.additional_params['max_accel'],
-            shape=(int(self.scenario.vehicles.num_rl_vehicles / num_rings), ),
+            shape=(1, ), 
             dtype=np.float32)
 
     def get_state(self):
@@ -93,30 +93,31 @@ class MultiWaveAttenuationPOEnv(MultiEnv):
     def compute_reward(self, rl_actions, **kwargs):
         """See class definition."""
         # in the warmup steps
+        rl_actions = list(rl_actions.values())
         if rl_actions is None:
-            return {}
+            return 0
 
-        rew = {}
-        for rl_id in rl_actions.keys():
-            edge_id = rl_id.split('_')[1]
-            edges = self.gen_edges(edge_id)
-            vehs_on_edge = self.k.vehicle.get_ids_by_edge(edges)
-            vel = np.array([
-                self.k.vehicle.get_speed(veh_id)
-                for veh_id in vehs_on_edge
-            ])
-            if any(vel < -100) or kwargs['fail']:
-                return 0.
+        vel = np.array([
+            self.k.vehicle.get_speed(veh_id)
+            for veh_id in self.k.vehicle.get_ids()
+        ])
 
-            target_vel = self.env_params.additional_params['target_velocity']
-            max_cost = np.array([target_vel] * len(vehs_on_edge))
-            max_cost = np.linalg.norm(max_cost)
+        if any(vel < -100) or kwargs['fail']:
+            return 0.
 
-            cost = vel - target_vel
-            cost = np.linalg.norm(cost)
+        # reward average velocity
+        eta_2 = 4.
+        reward = eta_2 * np.mean(vel) / 20
 
-            rew[rl_id] = max(max_cost - cost, 0) / max_cost
-        return rew
+        # punish accelerations (should lead to reduced stop-and-go waves)
+        eta = 8  # 0.25
+        rl_actions = np.array(rl_actions)
+        accel_threshold = 0
+
+        if np.mean(np.abs(rl_actions)) > accel_threshold:
+            reward += eta * (accel_threshold - np.mean(np.abs(rl_actions)))
+
+        return float(reward)
 
     def additional_command(self):
         """Define which vehicles are observed for visualization purposes."""

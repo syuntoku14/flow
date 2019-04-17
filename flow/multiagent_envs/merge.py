@@ -53,7 +53,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(3, ), dtype=np.float32)
+        return Box(low=0, high=1, shape=(5, ), dtype=np.float32)
 
     def _apply_rl_actions(self, rl_actions):
         """See class definition"""
@@ -114,17 +114,21 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         if self.env_params.evaluate:
             return np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
         else:
-            # return a reward of 0 if a collision occurred
-            if kwargs["fail"]:
-                return 0
-
+            ## return a reward of 0 if a collision occurred
+            #if kwargs["fail"]:
+            #    return 0
+            
+            rew = {}
+            # weights for cost1, cost2, and cost3, respectively
+            eta1, eta2 = 1.00, 0.10
+            
             # reward high system-level velocities
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
 
             # penalize small time headways
-            cost2 = 0
             t_min = 1  # smallest acceptable time headway
-            for rl_id in self.rl_veh:
+            for rl_id in self.k.vehicle.get_rl_ids():
+                cost2 = 0
                 lead_id = self.k.vehicle.get_leader(rl_id)
                 if lead_id not in ["", None] \
                         and self.k.vehicle.get_speed(rl_id) > 0:
@@ -132,11 +136,11 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                         self.k.vehicle.get_headway(rl_id) /
                         self.k.vehicle.get_speed(rl_id), 0)
                     cost2 += min((t_headway - t_min) / t_min, 0)
-
-            # weights for cost1, cost2, and cost3, respectively
-            eta1, eta2 = 1.00, 0.10
-
-            return max(eta1 * cost1 + eta2 * cost2, 0)
+                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0)})
+                if kwargs["fail"]:
+                    rew.update({rl_id: 0})
+                    
+            return rew
 
     def additional_command(self):
         """See parent class.

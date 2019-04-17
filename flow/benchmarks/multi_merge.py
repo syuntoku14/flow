@@ -23,8 +23,6 @@ FLOW_RATE = 2000
 FLOW_RATE_MERGE = 100
 # percent of autonomous vehicles
 RL_PENETRATION = 0.1
-# num_rl term (see ADDITIONAL_ENV_PARAMs)
-NUM_RL = 100
 
 # We consider a highway network with an upstream merging lane producing
 # shockwaves
@@ -74,7 +72,7 @@ inflow.add(
 
 flow_params = dict(
     # name of the experiment
-    exp_tag="merge_0",
+    exp_tag="multi_merge",
 
     # name of the flow environment the experiment is running on
     env_name="MultiWaveAttenuationMergePOEnv",
@@ -100,8 +98,7 @@ flow_params = dict(
         additional_params={
             "max_accel": 1.5,
             "max_decel": 1.5,
-            "target_velocity": 25,
-            "num_rl": NUM_RL,
+            "target_velocity": 25
         },
     ),
 

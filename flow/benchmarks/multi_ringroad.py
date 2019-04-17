@@ -36,7 +36,7 @@ vehicles.add(
     car_following_params=SumoCarFollowingParams(
         speed_mode="obey_safe_speed",
     ),
-    num_vehicles=1)
+    num_vehicles=3)
 
 ADDITIONAL_NET_PARAMS = {
     # length of the ring road
@@ -51,10 +51,10 @@ ADDITIONAL_NET_PARAMS = {
 
 flow_params = dict(
     # name of the experiment
-    exp_tag="loop_0",
+    exp_tag="loopTL",
 
     # name of the flow environment the experiment is running on
-    env_name="AccelEnv",
+    env_name="MultiWaveAttenuationPOEnv",
 
     # name of the scenario class the experiment is running on
     scenario="LoopScenario",
@@ -64,7 +64,7 @@ flow_params = dict(
 
     # sumo-related parameters (see flow.core.params.SumoParams)
     sim=SumoParams(
-        sim_step=0.1,
+        sim_step=0.2,
         render=False,
         print_warnings=False,
         restart_instance=True,
@@ -78,6 +78,7 @@ flow_params = dict(
             "target_velocity": 20,
             "max_accel": 3,
             "max_decel": 3,
+            'ring_length': [1400, 1400],
             "sort_vehicles": False
         },
     ),
@@ -86,7 +87,12 @@ flow_params = dict(
     # scenario's documentation or ADDITIONAL_NET_PARAMS component)
     net=NetParams(
         no_internal_links=False,
-        additional_params=deepcopy(ADDITIONAL_NET_PARAMS),
+        additional_params={
+            'length': 1400,
+            'lanes': 1,
+            'speed_limit': 30,
+            'resolution': 40
+        }
     ),
 
     # vehicles to be placed in the network at the start of a rollout (see
@@ -95,5 +101,5 @@ flow_params = dict(
 
     # parameters specifying the positioning of vehicles upon initialization/
     # reset (see flow.core.params.InitialConfig)
-    initial=InitialConfig(bunching=20),
+    initial=InitialConfig(),
 )
