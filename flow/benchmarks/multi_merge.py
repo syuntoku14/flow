@@ -14,10 +14,11 @@ from flow.core.params import SumoParams, EnvParams, InitialConfig, NetParams, \
     InFlows, SumoCarFollowingParams
 from flow.scenarios.merge import ADDITIONAL_NET_PARAMS
 from flow.core.params import VehicleParams
-from flow.controllers import IDMController, RLController
+from flow.controllers import IDMController, RLController, SimCarFollowingController
 
 # time horizon of a single rollout
-HORIZON = 3600
+HORIZON = 750
+WARMUP = 100
 # inflow rate at the highway
 FLOW_RATE = 2000
 FLOW_RATE_MERGE = 100
@@ -35,16 +36,16 @@ additional_net_params["pre_merge_length"] = 600
 vehicles = VehicleParams()
 vehicles.add(
     veh_id="human",
-    acceleration_controller=(IDMController, {"noise": 0.2}),
+    acceleration_controller=(SimCarFollowingController, {}),
     car_following_params=SumoCarFollowingParams(
-        speed_mode="no_collide",
+        speed_mode="obey_safe_speed",
     ),
-    num_vehicles=5)
+    num_vehicles=20)
 vehicles.add(
     veh_id="rl",
     acceleration_controller=(RLController, {}),
     car_following_params=SumoCarFollowingParams(
-        speed_mode="no_collide",
+        speed_mode="obey_safe_speed",
     ),
     num_vehicles=0)
 
@@ -94,7 +95,7 @@ flow_params = dict(
     env=EnvParams(
         horizon=HORIZON,
         sims_per_step=2,
-        warmup_steps=0,
+        warmup_steps=WARMUP,
         additional_params={
             "max_accel": 1.5,
             "max_decel": 1.5,
