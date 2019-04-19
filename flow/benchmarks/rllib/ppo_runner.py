@@ -34,24 +34,20 @@ parser = argparse.ArgumentParser(
 
 # required input parameters
 parser.add_argument(
-    "--upload_dir", type=str, help="S3 Bucket to upload to.")
-
-# required input parameters
-parser.add_argument(
     "--benchmark_name", type=str, help="File path to solution environment.")
 
 # optional input parameters
 parser.add_argument(
     '--num_rollouts',
     type=int,
-    default=50,
+    default=60,
     help="The number of rollouts to train over.")
 
 # optional input parameters
 parser.add_argument(
     '--num_cpus',
     type=int,
-    default=2,
+    default=63,
     help="The number of cpus to use.")
 
 if __name__ == "__main__":
@@ -63,8 +59,6 @@ if __name__ == "__main__":
     num_rollouts = args.num_rollouts
     # number of parallel workers
     num_cpus = args.num_cpus
-
-    upload_dir = args.upload_dir
 
     # Import the benchmark and fetch its flow_params
     benchmark = __import__(
@@ -121,12 +115,9 @@ if __name__ == "__main__":
         "stop": {
             "training_iteration": 500
         },
-        "num_samples": 3,
+        "num_samples": 1,
 
     }
-
-    if upload_dir:
-        exp_tag["upload_dir"] = "s3://" + upload_dir
 
     trials = run_experiments({
         flow_params["exp_tag"]: exp_tag

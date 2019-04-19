@@ -1,12 +1,13 @@
-"""Benchmark for merge0.
+"""Benchmark for multi-merge
 
 Trains a small percentage of autonomous vehicles to dissipate shockwaves caused
 by merges in an open network. The autonomous penetration rate in this example
-is 10%.
+is 10%. This is multi-agent scenario
 
-- **Action Dimension**: (5, )
-- **Observation Dimension**: (25, )
+- **Action Dimension**: (1, )
+- **Observation Dimension**: (5, )
 - **Horizon**: 750 steps
+- **Warmup**: 100 steps
 """
 
 from copy import deepcopy

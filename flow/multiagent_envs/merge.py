@@ -1,5 +1,5 @@
 """
-Environments for training vehicles to reduce congestion in a merge.
+Environments for training multi-agent vehicles to reduce congestion in a merge.
 
 This environment was used in:
 TODO(ak): add paper after it has been published.
