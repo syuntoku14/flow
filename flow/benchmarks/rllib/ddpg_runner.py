@@ -1,11 +1,12 @@
 """Runs the environments located in flow/benchmarks.
 The environment file can be modified in the imports to change the environment
-this runner script is executed on. This file runs the PPO algorithm in rllib
+this runner script is executed on. This file runs the DDPG algorithm in rllib
 and utilizes the hyper-parameters specified in:
 Proximal Policy Optimization Algorithms by Schulman et. al.
 """
 import json
 import argparse
+import numpy as np
 
 import ray
 try:
@@ -20,7 +21,7 @@ from flow.utils.rllib import FlowParamsEncoder
 
 EXAMPLE_USAGE = """
 example usage:
-    python ppo_runner.py grid0
+    python ddpg_runner.py grid0
 Here the arguments are:
 benchmark_name - name of the benchmark to run
 num_rollouts - number of rollouts to train across
@@ -50,6 +51,27 @@ parser.add_argument(
     default=63,
     help="The number of cpus to use.")
 
+
+def on_episode_start(info):
+    episode = info["episode"]
+    episode.user_data["episode_rew_mean"] = []
+    
+def on_episode_step(info):
+    episode = info["episode"]
+    rewds = list(episode.agent_rewards.values())
+    rew = 0
+    if not len(rewds) == 0:
+        rew = np.mean(rewds)
+    episode.user_data["episode_rew_mean"].append(rew)
+
+def on_episode_end(info):
+    episode = info["episode"]
+    total_reward = np.sum(episode.user_data["episode_rew_mean"])
+    episode.custom_metrics["episode_total_rew"] = total_reward
+
+def on_train_result(info):
+    info["result"]["callback_ok"] = True
+
 if __name__ == "__main__":
     benchmark_name = 'grid0'
     args = parser.parse_args()
@@ -71,36 +93,28 @@ if __name__ == "__main__":
     # initialize a ray instance
     ray.init(redirect_output=True)
 
-    alg_run = "PPO"
+    alg_run = "DDPG"
 
     horizon = flow_params["env"].horizon
     agent_cls = get_agent_class(alg_run)
+    # use almost defalt config
     config = agent_cls._default_config.copy()
     config["num_workers"] = min(num_cpus, num_rollouts)
     config["train_batch_size"] = horizon * num_rollouts
-    config["use_gae"] = True
     config["horizon"] = horizon
-    gae_lambda = 0.97
-    step_size = 5e-4
-    if benchmark_name == "grid0":
-        gae_lambda = 0.5
-        step_size = 5e-5
-    elif benchmark_name == "grid1":
-        gae_lambda = 0.3
-    config["lambda"] = gae_lambda
-    config["lr"] = step_size
-    config["vf_clip_param"] = 1e6
-    config["num_sgd_iter"] = 10
+    config['timesteps_per_iteration'] = horizon
     config['clip_actions'] = False  # FIXME(ev) temporary ray bug
-    config["model"]["fcnet_hiddens"] = [100, 50, 25]
     config["observation_filter"] = "NoFilter"
-    config["entropy_coeff"] = 0.01
 
     # save the flow params for replay
     flow_json = json.dumps(
         flow_params, cls=FlowParamsEncoder, sort_keys=True, indent=4)
     config['env_config']['flow_params'] = flow_json
     config['env_config']['run'] = alg_run
+    config["callbacks"]["on_episode_start"] = ray.tune.function(on_episode_start)
+    config["callbacks"]["on_episode_step"] = ray.tune.function(on_episode_step)
+    config["callbacks"]["on_episode_end"] = ray.tune.function(on_episode_end)
+    config["callbacks"]["on_train_result"] = ray.tune.function(on_train_result)
 
     # Register as rllib env
     register_env(env_name, create_env)
