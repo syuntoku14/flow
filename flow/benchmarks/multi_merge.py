@@ -19,7 +19,7 @@ from flow.controllers import IDMController, RLController, SimCarFollowingControl
 
 # time horizon of a single rollout
 HORIZON = 750
-WARMUP = 100
+WARMUP = 50
 # inflow rate at the highway
 FLOW_RATE = 2000
 FLOW_RATE_MERGE = 100
@@ -88,7 +88,7 @@ flow_params = dict(
     # sumo-related parameters (see flow.core.params.SumoParams)
     sim=SumoParams(
         restart_instance=True,
-        sim_step=0.2,
+        sim_step=0.5,
         render=False,
     ),
 
@@ -100,7 +100,7 @@ flow_params = dict(
         additional_params={
             "max_accel": 1.5,
             "max_decel": 1.5,
-            "target_velocity": 25
+            "target_velocity": 20
         },
     ),
 

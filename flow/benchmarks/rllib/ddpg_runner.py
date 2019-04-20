@@ -52,26 +52,6 @@ parser.add_argument(
     help="The number of cpus to use.")
 
 
-def on_episode_start(info):
-    episode = info["episode"]
-    episode.user_data["episode_rew_mean"] = []
-    
-def on_episode_step(info):
-    episode = info["episode"]
-    rewds = list(episode.agent_rewards.values())
-    rew = 0
-    if not len(rewds) == 0:
-        rew = np.mean(rewds)
-    episode.user_data["episode_rew_mean"].append(rew)
-
-def on_episode_end(info):
-    episode = info["episode"]
-    total_reward = np.sum(episode.user_data["episode_rew_mean"])
-    episode.custom_metrics["episode_total_rew"] = total_reward
-
-def on_train_result(info):
-    info["result"]["callback_ok"] = True
-
 if __name__ == "__main__":
     benchmark_name = 'grid0'
     args = parser.parse_args()
@@ -96,13 +76,15 @@ if __name__ == "__main__":
     alg_run = "DDPG"
 
     horizon = flow_params["env"].horizon
+    sim_step = flow_params["sim"].sim_step
+
     agent_cls = get_agent_class(alg_run)
     # use almost defalt config
     config = agent_cls._default_config.copy()
     config["num_workers"] = min(num_cpus, num_rollouts)
     config["train_batch_size"] = horizon * num_rollouts
     config["horizon"] = horizon
-    config['timesteps_per_iteration'] = horizon
+    config['timesteps_per_iteration'] = int(horizon / sim_step)
     config['clip_actions'] = False  # FIXME(ev) temporary ray bug
     config["observation_filter"] = "NoFilter"
 
@@ -111,10 +93,6 @@ if __name__ == "__main__":
         flow_params, cls=FlowParamsEncoder, sort_keys=True, indent=4)
     config['env_config']['flow_params'] = flow_json
     config['env_config']['run'] = alg_run
-    config["callbacks"]["on_episode_start"] = ray.tune.function(on_episode_start)
-    config["callbacks"]["on_episode_step"] = ray.tune.function(on_episode_step)
-    config["callbacks"]["on_episode_end"] = ray.tune.function(on_episode_end)
-    config["callbacks"]["on_train_result"] = ray.tune.function(on_train_result)
 
     # Register as rllib env
     register_env(env_name, create_env)
@@ -128,7 +106,7 @@ if __name__ == "__main__":
         "checkpoint_freq": 25,
         "max_failures": 999,
         "stop": {
-            "training_iteration": 200
+            "training_iteration": 500
         },
         "num_samples": 1,
 
