@@ -81,10 +81,10 @@ if __name__ == "__main__":
     agent_cls = get_agent_class(alg_run)
     # use almost defalt config
     config = agent_cls._default_config.copy()
-    config["num_workers"] = min(num_cpus, num_rollouts)
+    config["num_workers"] = num_cpus
     config["train_batch_size"] = horizon * num_rollouts
     config["horizon"] = horizon
-    config['timesteps_per_iteration'] = int(horizon / sim_step)
+    config['timesteps_per_iteration'] = int(horizon * num_rollouts / sim_step)
     config['clip_actions'] = False  # FIXME(ev) temporary ray bug
     config["observation_filter"] = "NoFilter"
 
