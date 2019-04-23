@@ -24,7 +24,6 @@ example usage:
     python ddpg_runner.py grid0
 Here the arguments are:
 benchmark_name - name of the benchmark to run
-num_rollouts - number of rollouts to train across
 num_cpus - number of cpus to use for training
 """
 
@@ -39,13 +38,6 @@ parser.add_argument(
 
 # optional input parameters
 parser.add_argument(
-    '--num_rollouts',
-    type=int,
-    default=60,
-    help="The number of rollouts to train over.")
-
-# optional input parameters
-parser.add_argument(
     '--num_cpus',
     type=int,
     default=63,
@@ -57,8 +49,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # benchmark name
     benchmark_name = args.benchmark_name
-    # number of rollouts per training iteration
-    num_rollouts = args.num_rollouts
     # number of parallel workers
     num_cpus = args.num_cpus
 
@@ -71,7 +61,7 @@ if __name__ == "__main__":
     create_env, env_name = make_create_env(params=flow_params, version=0)
 
     # initialize a ray instance
-    ray.init(redirect_output=True)
+    ray.init()
 
     alg_run = "DDPG"
 
@@ -82,17 +72,24 @@ if __name__ == "__main__":
     # use almost defalt config
     config = agent_cls._default_config.copy()
     config["num_workers"] = num_cpus
-    config["train_batch_size"] = horizon * num_rollouts
+    config["train_batch_size"] = horizon 
     config["horizon"] = horizon
-    config['timesteps_per_iteration'] = int(horizon * num_rollouts / sim_step)
+    config['timesteps_per_iteration'] = int(horizon / sim_step)
     config['clip_actions'] = False  # FIXME(ev) temporary ray bug
     config["observation_filter"] = "NoFilter"
+    config["batch_mode"] = "complete_episodes"
 
     # save the flow params for replay
     flow_json = json.dumps(
         flow_params, cls=FlowParamsEncoder, sort_keys=True, indent=4)
     config['env_config']['flow_params'] = flow_json
     config['env_config']['run'] = alg_run
+
+    # tunning parameters
+    config["lr"] = ray.tune.grid_search([5e-4, 1e-3])
+    config["parameter_noise"] = ray.tune.grid_search([True, False])
+    config["actor_hiddens"] = ray.tune.grid_search([[64, 64]])
+    config["critic_hiddens"] = ray.tune.grid_search([[100, 50, 25]])
 
     # Register as rllib env
     register_env(env_name, create_env)
@@ -106,12 +103,11 @@ if __name__ == "__main__":
         "checkpoint_freq": 25,
         "max_failures": 999,
         "stop": {
-            "training_iteration": 500
+            "training_iteration": 200
         },
         "num_samples": 1,
-
     }
 
-    trials = run_experiments({
-        flow_params["exp_tag"]: exp_tag
-    })
+    trials = run_experiments(
+        experiments={flow_params["exp_tag"]: exp_tag},
+    )
