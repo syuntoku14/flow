@@ -227,27 +227,27 @@ class TraCIScenario(KernelScenario):
         is to prevent them from building up in the debug folder. Note that in
         the case of import .net.xml files we do not want to delete them.
         """
+        def remove(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
         if self.network.net_params.netfile is None:
-            os.remove(self.net_path + self.nodfn)
-            os.remove(self.net_path + self.edgfn)
-            os.remove(self.net_path + self.cfgfn)
-            os.remove(self.cfg_path + self.addfn)
-            os.remove(self.cfg_path + self.guifn)
-            os.remove(self.cfg_path + self.netfn)
-            os.remove(self.cfg_path + self.roufn)
-            os.remove(self.cfg_path + self.sumfn)
+            remove(self.net_path + self.nodfn)
+            remove(self.net_path + self.edgfn)
+            remove(self.net_path + self.cfgfn)
+            remove(self.cfg_path + self.addfn)
+            remove(self.cfg_path + self.guifn)
+            remove(self.cfg_path + self.netfn)
+            remove(self.cfg_path + self.roufn)
+            remove(self.cfg_path + self.sumfn)
 
             # the connection file is not always created
-            try:
-                os.remove(self.net_path + self.confn)
-            except OSError:
-                pass
+            remove(self.net_path + self.confn)
 
             # neither is the type file
-            try:
-                os.remove(self.net_path + self.typfn)
-            except OSError:
-                pass
+            remove(self.net_path + self.typfn)
 
     def get_edge(self, x):
         """See parent class."""
