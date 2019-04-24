@@ -12,6 +12,7 @@ from ray.rllib.env import MultiAgentEnv
 from flow.envs.base_env import Env
 from flow.utils.exceptions import FatalFlowError
 
+import collections
 
 class MultiEnv(MultiAgentEnv, Env):
     """Multi-agent version of base env. See parent class for info"""
@@ -104,15 +105,19 @@ class MultiEnv(MultiAgentEnv, Env):
                 break
 
         states = self.get_state()
-        done = {key: key in self.k.vehicle.get_arrived_ids()
-                for key in states.keys()}
+        done = collections.OrderedDict()
+        infos = collections.OrderedDict()
+
+        for key in states.keys():
+            done.update({key: key in self.k.vehicle.get_arrived_ids()})
+            infos.update({key: {}})
+
         if crash or (self.time_counter >= self.env_params.warmup_steps + self.env_params.horizon):
             done['__all__'] = True
             for key in done:
                 done[key] = True
         else:
             done['__all__'] = False
-        infos = {key: {} for key in states.keys()}
 
         clipped_actions = self.clip_actions(rl_actions)
         reward = self.compute_reward(clipped_actions, fail=crash)

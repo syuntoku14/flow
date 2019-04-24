@@ -72,7 +72,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         max_speed = self.k.scenario.max_speed()
         max_length = self.k.scenario.length()
 
-        obs = {}
+        obs = collections.OrderedDict()
         for rl_id in self.k.vehicle.get_rl_ids():
             this_speed = self.k.vehicle.get_speed(rl_id)
             lead_id = self.k.vehicle.get_leader(rl_id)
@@ -118,7 +118,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             #if kwargs["fail"]:
             #    return 0
             
-            rew = {}
+            rew = collections.OrderedDict()
             # weights for cost1, cost2, and cost3, respectively
             eta1, eta2 = 1.00, 0.10
             
