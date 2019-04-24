@@ -18,6 +18,9 @@ class MultiEnv(MultiAgentEnv, Env):
     """Multi-agent version of base env. See parent class for info"""
 
     def step(self, rl_actions):
+        return self._step(rl_actions)
+    
+    def _step(self, rl_actions):
         """Advance the environment by one step.
 
         Assigns actions to autonomous and human-driven agents (i.e. vehicles,
@@ -106,14 +109,14 @@ class MultiEnv(MultiAgentEnv, Env):
 
         states = self.get_state()
         done = collections.OrderedDict()
-        infos = collections.OrderedDict()
+        info = {'needs_reset': False}
 
         for key in states.keys():
             done.update({key: key in self.k.vehicle.get_arrived_ids()})
-            infos.update({key: {}})
 
         if crash or (self.time_counter >= self.env_params.warmup_steps + self.env_params.horizon):
             done['__all__'] = True
+            info['needs_reset'] = True
             for key in done:
                 done[key] = True
         else:
@@ -122,7 +125,7 @@ class MultiEnv(MultiAgentEnv, Env):
         clipped_actions = self.clip_actions(rl_actions)
         reward = self.compute_reward(clipped_actions, fail=crash)
 
-        return states, reward, done, infos
+        return states, reward, done, info
 
     def reset(self, new_inflow_rate=None):
         """Reset the environment.

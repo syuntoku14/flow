@@ -120,3 +120,6 @@ flow_params = dict(
     # reset (see flow.core.params.InitialConfig)
     initial=InitialConfig(),
 )
+
+mean_rew_flow_params = flow_params
+mean_rew_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvMeanRew"
