@@ -19,7 +19,12 @@ ADDITIONAL_ENV_PARAMS = {
     # maximum deceleration for autonomous vehicles, in m/s^2
     "max_decel": 3,
     # desired velocity for all vehicles in the network, in m/s
-    "target_velocity": 25
+    "target_velocity": 25,
+    # weigts of cost function
+    "eta1": 1.0,
+    "eta2": 0.1,
+    # reward scaling
+    "reward_scale": 1.0
 }
 
 
@@ -119,8 +124,10 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             #    return 0
             
             rew = collections.OrderedDict()
+            scale = self.env_params.additional_params["reward_scale"]
             # weights for cost1, cost2, and cost3, respectively
-            eta1, eta2 = 1.00, 0.10
+            eta1 = self.env_params.additional_params["eta1"]
+            eta2 = self.env_params.additional_params["eta2"]
             
             # reward high system-level velocities
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
@@ -136,7 +143,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                         self.k.vehicle.get_headway(rl_id) /
                         self.k.vehicle.get_speed(rl_id), 0)
                     cost2 += min((t_headway - t_min) / t_min, 0.0)
-                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0)})
+                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0) * scale})
                 if kwargs["fail"]:
                     rew.update({rl_id: 0.0})
                     

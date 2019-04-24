@@ -88,7 +88,7 @@ flow_params = dict(
     # sumo-related parameters (see flow.core.params.SumoParams)
     sim=SumoParams(
         restart_instance=True,
-        sim_step=0.5,
+        sim_step=0.2,
         render=False,
     ),
 
@@ -98,9 +98,12 @@ flow_params = dict(
         sims_per_step=2,
         warmup_steps=WARMUP,
         additional_params={
-            "max_accel": 1.5,
-            "max_decel": 1.5,
-            "target_velocity": 20
+            "max_accel": 3,
+            "max_decel": 3,
+            "target_velocity": 25,
+            "eta1": 1.0,
+            "eta2": 0.1,
+            "reward_scale": 1.0
         },
     ),
 

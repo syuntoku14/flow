@@ -6,6 +6,7 @@ Proximal Policy Optimization Algorithms by Schulman et. al.
 """
 import json
 import argparse
+from itertools import product
 import numpy as np
 
 import ray
@@ -36,6 +37,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--benchmark_name", type=str, help="File path to solution environment.")
 
+parser.add_argument(
+    "--exp_tag", type=str, help="experiment tag")
+
 # optional input parameters
 parser.add_argument(
     '--num_cpus',
@@ -47,7 +51,6 @@ parser.add_argument(
 if __name__ == "__main__":
     benchmark_name = 'grid0'
     args = parser.parse_args()
-    # benchmark name
     benchmark_name = args.benchmark_name
     # number of parallel workers
     num_cpus = args.num_cpus
@@ -56,9 +59,6 @@ if __name__ == "__main__":
     benchmark = __import__(
         "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
     flow_params = benchmark.flow_params
-
-    # get the env name and a creator for the environment
-    create_env, env_name = make_create_env(params=flow_params, version=0)
 
     # initialize a ray instance
     ray.init()
@@ -86,28 +86,39 @@ if __name__ == "__main__":
     config['env_config']['run'] = alg_run
 
     # tunning parameters
-    config["lr"] = ray.tune.grid_search([5e-4, 1e-3])
-    config["parameter_noise"] = ray.tune.grid_search([True, False])
-    config["actor_hiddens"] = ray.tune.grid_search([[64, 64]])
-    config["critic_hiddens"] = ray.tune.grid_search([[100, 50, 25]])
+    eta = [[1.0, 0.1], [0.9, 0.2], [0.8, 0.3]]
+    reward_scale = [1.0, 1.2, 0.8]
+    
+    env_name_list = []
+    for e, rew in product(eta, reward_scale):
+        flow_params["env"].additional_params["eta1"] = e[0]
+        flow_params["env"].additional_params["eta2"] = e[1]
+        flow_params["env"].additional_params["reward_scale"] = rew
 
-    # Register as rllib env
-    register_env(env_name, create_env)
+        # get the env name and a creator for the environment
+        create_env, env_name = make_create_env(params=flow_params, version=0)
+        env_name = env_name + '_[eta1, eta2]:[{}, {}]'.format(e[0], e[1]) + '_scale:{}'.format(rew)
+        env_name_list.append(env_name)
+        # Register as rllib env
+        register_env(env_name, create_env)
 
-    exp_tag = {
-        "run": alg_run,
-        "env": env_name,
-        "config": {
-            **config
-        },
-        "checkpoint_freq": 25,
-        "max_failures": 999,
-        "stop": {
-            "training_iteration": 200
-        },
-        "num_samples": 1,
-    }
+    exp_tag_list = []
+    for env_name in env_name_list:
+        exp_tag = {
+            "run": alg_run,
+            "env": env_name,
+            "config": {
+                **config
+            },
+            "checkpoint_freq": 25,
+            "max_failures": 999,
+            "stop": {
+                "training_iteration": 200
+            },
+            "num_samples": 1,
+        }
+        exp_tag_list.append(exp_tag)
 
     trials = run_experiments(
-        experiments={flow_params["exp_tag"]: exp_tag},
+        experiments={args.exp_tag: exp_tag for exp_tag in exp_tag_list},
     )
