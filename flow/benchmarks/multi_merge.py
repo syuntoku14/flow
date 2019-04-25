@@ -103,7 +103,8 @@ flow_params = dict(
             "target_velocity": 25,
             "eta1": 1.0,
             "eta2": 0.1,
-            "reward_scale": 1.0
+            "reward_scale": 1.0,
+            "t_min": 1.0
         },
     ),
 
@@ -124,5 +125,8 @@ flow_params = dict(
     initial=InitialConfig(),
 )
 
-mean_rew_flow_params = flow_params
-mean_rew_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvMeanRew"
+one_rew_flow_params = deepcopy(flow_params)
+one_rew_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvOneRew"
+
+mean_vel_rew_flow_params = deepcopy(flow_params)
+mean_vel_rew_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvMeanVelRew"

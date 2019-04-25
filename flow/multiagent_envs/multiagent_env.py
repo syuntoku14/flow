@@ -109,14 +109,13 @@ class MultiEnv(MultiAgentEnv, Env):
 
         states = self.get_state()
         done = collections.OrderedDict()
-        info = {'needs_reset': False}
+        info = collections.OrderedDict()
 
         for key in states.keys():
             done.update({key: key in self.k.vehicle.get_arrived_ids()})
 
         if crash or (self.time_counter >= self.env_params.warmup_steps + self.env_params.horizon):
             done['__all__'] = True
-            info['needs_reset'] = True
             for key in done:
                 done[key] = True
         else:

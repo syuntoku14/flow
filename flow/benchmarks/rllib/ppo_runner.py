@@ -6,13 +6,15 @@ Proximal Policy Optimization Algorithms by Schulman et. al.
 """
 import json
 import argparse
+from itertools import product
+import numpy as np
 
 import ray
 try:
     from ray.rllib.agents.agent import get_agent_class
 except ImportError:
     from ray.rllib.agents.registry import get_agent_class
-from ray.tune import run_experiments
+from ray.tune import Experiment, run_experiments
 from ray.tune.registry import register_env
 
 from flow.utils.registry import make_create_env
@@ -36,6 +38,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--benchmark_name", type=str, help="File path to solution environment.")
 
+parser.add_argument(
+    "--exp_tag", type=str, help="experiment tag")
+
 # optional input parameters
 parser.add_argument(
     '--num_rollouts',
@@ -51,7 +56,6 @@ parser.add_argument(
     help="The number of cpus to use.")
 
 if __name__ == "__main__":
-    benchmark_name = 'grid0'
     args = parser.parse_args()
     # benchmark name
     benchmark_name = args.benchmark_name
@@ -63,7 +67,7 @@ if __name__ == "__main__":
     # Import the benchmark and fetch its flow_params
     benchmark = __import__(
         "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
-    flow_params = benchmark.flow_params
+    flow_params = benchmark.mean_vel_rew_flow_params
 
     # get the env name and a creator for the environment
     create_env, env_name = make_create_env(params=flow_params, version=0)
@@ -82,11 +86,6 @@ if __name__ == "__main__":
     config["horizon"] = horizon
     gae_lambda = 0.97
     step_size = 5e-4
-    if benchmark_name == "grid0":
-        gae_lambda = 0.5
-        step_size = 5e-5
-    elif benchmark_name == "grid1":
-        gae_lambda = 0.3
     config["lambda"] = gae_lambda
     config["lr"] = step_size
     config["vf_clip_param"] = 1e6
@@ -94,7 +93,7 @@ if __name__ == "__main__":
     config['clip_actions'] = False  # FIXME(ev) temporary ray bug
     config["model"]["fcnet_hiddens"] = [100, 50, 25]
     config["observation_filter"] = "NoFilter"
-    config["entropy_coeff"] = 0.01
+    config["entropy_coeff"] = 0.0
 
     # save the flow params for replay
     flow_json = json.dumps(
@@ -102,24 +101,48 @@ if __name__ == "__main__":
     config['env_config']['flow_params'] = flow_json
     config['env_config']['run'] = alg_run
 
-    # Register as rllib env
-    register_env(env_name, create_env)
 
-    exp_tag = {
-        "run": alg_run,
-        "env": env_name,
-        "config": {
-            **config
-        },
-        "checkpoint_freq": 25,
-        "max_failures": 999,
-        "stop": {
-            "training_iteration": 200
-        },
-        "num_samples": 1,
+    # tunning parameters
+    eta = [[1.0, 0.3]]
+    reward_scale = [1.0]#, 0.5]
+    t_min = [3.0]# , 5.0, 10.0]
+    
+    env_name_list = []
+    i = 0
+    for e, rew, t in product(eta, reward_scale, t_min):
+        i += 1
+        # if i == 1:
+        #     continue
 
-    }
+        flow_params["env"].additional_params["eta1"] = e[0]
+        flow_params["env"].additional_params["eta2"] = e[1]
+        flow_params["env"].additional_params["reward_scale"] = rew
+        flow_params["env"].additional_params["t_min"] = t
 
-    trials = run_experiments({
-        flow_params["exp_tag"]: exp_tag
-    })
+        # get the env name and a creator for the environment
+        create_env, env_name = make_create_env(params=flow_params, version=0)
+        env_name = env_name + '_[eta1, eta2]:[{}, {}]'.format(e[0], e[1]) + '_scale:{}'.format(rew) + '_t_min:{}'.format(t)
+        env_name_list.append(env_name)
+        # Register as rllib env
+        register_env(env_name, create_env)
+
+    exp_list = []
+    for env_name in env_name_list:
+        exp_tag = {
+            "run": alg_run,
+            "env": env_name,
+            "config": {
+                **config
+            },
+            "checkpoint_freq": 25,
+            "max_failures": 999,
+            "stop": {
+                "training_iteration": 300
+            },
+            "num_samples": 1,
+        }
+        exp_list.append(Experiment.from_json(args.exp_tag, exp_tag))
+        
+    trials = run_experiments(
+        experiments=exp_list
+    )

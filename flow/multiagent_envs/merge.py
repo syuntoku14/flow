@@ -20,6 +20,7 @@ ADDITIONAL_ENV_PARAMS = {
     "max_decel": 3,
     # desired velocity for all vehicles in the network, in m/s
     "target_velocity": 25,
+    "t_min": 1.0,
     # weigts of cost function
     "eta1": 1.0,
     "eta2": 0.1,
@@ -131,9 +132,10 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             
             # reward high system-level velocities
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
+            # print("cost1: {}".format(cost1))
 
             # penalize small time headways
-            t_min = 1  # smallest acceptable time headway
+            t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
             for rl_id in self.k.vehicle.get_rl_ids():
                 cost2 = 0.0
                 lead_id = self.k.vehicle.get_leader(rl_id)
@@ -143,6 +145,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                         self.k.vehicle.get_headway(rl_id) /
                         self.k.vehicle.get_speed(rl_id), 0)
                     cost2 += min((t_headway - t_min) / t_min, 0.0)
+                    # print("cost2: {}".format(cost2))
                 rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0) * scale})
                 if kwargs["fail"]:
                     rew.update({rl_id: 0.0})
@@ -194,7 +197,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         return super().reset()
     
     
-class MultiWaveAttenuationMergePOEnvMeanRew(MultiWaveAttenuationMergePOEnv):
+class MultiWaveAttenuationMergePOEnvOneRew(MultiWaveAttenuationMergePOEnv):
     """
     Reward: mean reward of the each agents
     Done: return only '__all__'
@@ -237,3 +240,30 @@ class MultiWaveAttenuationMergePOEnvMeanRew(MultiWaveAttenuationMergePOEnv):
             
             return np.mean(rew) if len(rew) != 0 else cost1   
         
+
+class MultiWaveAttenuationMergePOEnvMeanVelRew(MultiWaveAttenuationMergePOEnv):
+    def compute_reward(self, rl_actions, **kwargs):
+        """See class definition."""
+        if self.env_params.evaluate:
+            return np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
+        else:
+            
+            rew = collections.OrderedDict()
+            scale = self.env_params.additional_params["reward_scale"]
+            # weights for cost1, cost2, and cost3, respectively
+            eta1 = self.env_params.additional_params["eta1"]
+            eta2 = self.env_params.additional_params["eta2"]
+            
+            # reward high system-level velocities
+            cost1 = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
+
+            # punish accelerations (should lead to reduced stop-and-go waves)
+            for rl_id in self.k.vehicle.get_rl_ids():
+                cost2 = 0.0
+                if rl_actions != None and rl_id in rl_actions:
+                    cost2 -= np.abs(rl_actions[rl_id][0])
+                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0) * scale})
+                if kwargs["fail"]:
+                    rew.update({rl_id: 0.0})
+                    
+            return rew
