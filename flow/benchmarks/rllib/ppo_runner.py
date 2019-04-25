@@ -55,6 +55,34 @@ parser.add_argument(
     default=63,
     help="The number of cpus to use.")
 
+
+def on_episode_start(info):
+    episode = info["episode"]
+    episode.user_data["cost1"] = []
+    episode.user_data["cost2"] = []
+
+
+def on_episode_step(info):
+    episode = info["episode"]
+    agent_ids = episode.agent_rewards.keys()
+    infos = [episode.last_info_for(id_[0]) for id_ in agent_ids]
+    cost1, cost2 = 0, 0
+    if len(infos) != 0:
+        cost1 = np.mean([info['cost1'] for info in infos])
+        cost2 = np.mean([info['cost2'] for info in infos])
+    episode.user_data["cost1"].append(cost1)
+    episode.user_data["cost2"].append(cost2)
+    
+    
+def on_episode_end(info):
+    episode = info["episode"]
+    cost1 = np.sum(episode.user_data["cost1"])
+    cost2 = np.sum(episode.user_data["cost2"])
+    print('episode {} ended with cost1: {:.3f} and cost2: {:.3f}'.format(episode.episode_id, cost1, cost2))
+    episode.custom_metrics["cost1"] = cost1
+    episode.custom_metrics["cost2"] = cost2
+    
+
 if __name__ == "__main__":
     args = parser.parse_args()
     # benchmark name
@@ -101,6 +129,9 @@ if __name__ == "__main__":
     config['env_config']['flow_params'] = flow_json
     config['env_config']['run'] = alg_run
 
+    config['callbacks']['on_episode_start'] = ray.tune.function(on_episode_start)
+    config['callbacks']['on_episode_step'] = ray.tune.function(on_episode_step)
+    config['callbacks']['on_episode_end'] = ray.tune.function(on_episode_end)
 
     # tunning parameters
     eta = [[1.0, 0.3]]

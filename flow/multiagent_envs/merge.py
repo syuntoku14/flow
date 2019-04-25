@@ -125,6 +125,8 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             #    return 0
             
             rew = collections.OrderedDict()
+            info = collections.OrderedDict()
+            
             scale = self.env_params.additional_params["reward_scale"]
             # weights for cost1, cost2, and cost3, respectively
             eta1 = self.env_params.additional_params["eta1"]
@@ -147,10 +149,12 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                     cost2 += min((t_headway - t_min) / t_min, 0.0)
                     # print("cost2: {}".format(cost2))
                 rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0) * scale})
+                info.update({rl_id: {'cost1': cost1, 'cost2': cost2}})
                 if kwargs["fail"]:
                     rew.update({rl_id: 0.0})
+                    info.update({rl_id: {'cost1': cost1, 'cost2': cost2}})
                     
-            return rew
+            return rew, info
 
     def additional_command(self):
         """See parent class.
