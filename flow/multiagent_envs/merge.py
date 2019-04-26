@@ -135,7 +135,9 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             # reward high system-level velocities
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
             # print("cost1: {}".format(cost1))
-
+            mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
+            outflow = self.k.vehicle.get_outflow_rate(600)
+            
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
             for rl_id in self.k.vehicle.get_rl_ids():
@@ -149,10 +151,10 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                     cost2 += min((t_headway - t_min) / t_min, 0.0)
                     # print("cost2: {}".format(cost2))
                 rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0) * scale})
-                info.update({rl_id: {'cost1': cost1, 'cost2': cost2}})
+                info.update({rl_id: {'cost1': cost1 * eta1, 'cost2': cost2 * eta2, 'mean_vel': mean_vel, "outflow": outflow}})
                 if kwargs["fail"]:
                     rew.update({rl_id: 0.0})
-                    info.update({rl_id: {'cost1': cost1, 'cost2': cost2}})
+                    info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
                     
             return rew, info
 

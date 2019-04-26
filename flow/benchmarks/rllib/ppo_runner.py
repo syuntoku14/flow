@@ -60,28 +60,36 @@ def on_episode_start(info):
     episode = info["episode"]
     episode.user_data["cost1"] = []
     episode.user_data["cost2"] = []
+    episode.user_data["mean_vel"] = []
+    episode.user_data["outflow"] = []
 
 
 def on_episode_step(info):
     episode = info["episode"]
     agent_ids = episode.agent_rewards.keys()
     infos = [episode.last_info_for(id_[0]) for id_ in agent_ids]
-    cost1, cost2 = 0, 0
+    cost1, cost2, mean_vel, outflow = 0, 0, 0, 0
     if len(infos) != 0:
         cost1 = np.mean([info['cost1'] for info in infos])
         cost2 = np.mean([info['cost2'] for info in infos])
+        mean_vel = np.mean([info['mean_vel'] for info in infos])
+        outflow = np.mean([info['outflow'] for info in infos])
     episode.user_data["cost1"].append(cost1)
     episode.user_data["cost2"].append(cost2)
+    episode.user_data["mean_vel"].append(mean_vel)
+    episode.user_data["outflow"].append(outflow)
     
     
 def on_episode_end(info):
     episode = info["episode"]
     cost1 = np.sum(episode.user_data["cost1"])
     cost2 = np.sum(episode.user_data["cost2"])
-    print('episode {} ended with cost1: {:.3f} and cost2: {:.3f}'.format(episode.episode_id, cost1, cost2))
+    mean_vel = np.mean(episode.user_data["mean_vel"])
+    outflow = np.mean(episode.user_data["outflow"][-500:])  # 1/3 of the whole steps
     episode.custom_metrics["cost1"] = cost1
     episode.custom_metrics["cost2"] = cost2
-    
+    episode.custom_metrics["system_level_velocity"] = mean_vel
+    episode.custom_metrics["outflow_rate"] = outflow
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -95,7 +103,7 @@ if __name__ == "__main__":
     # Import the benchmark and fetch its flow_params
     benchmark = __import__(
         "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
-    flow_params = benchmark.mean_vel_rew_flow_params
+    flow_params = benchmark.flow_params
 
     # get the env name and a creator for the environment
     create_env, env_name = make_create_env(params=flow_params, version=0)
@@ -134,25 +142,25 @@ if __name__ == "__main__":
     config['callbacks']['on_episode_end'] = ray.tune.function(on_episode_end)
 
     # tunning parameters
-    eta = [[1.0, 0.3]]
-    reward_scale = [1.0]#, 0.5]
-    t_min = [3.0]# , 5.0, 10.0]
+    # reward_scale = [1.0]#, 0.5]
+    eta = [[1.0, 5.0], [1.0, 10.0], [1.0, 3.0]]
+    t_min = [5.0, 10.0, 20.0]# , 5.0, 10.0]
     
     env_name_list = []
     i = 0
-    for e, rew, t in product(eta, reward_scale, t_min):
+    for e, t in product(eta, t_min):
         i += 1
-        # if i == 1:
-        #     continue
+        if i == 1:
+            continue
 
         flow_params["env"].additional_params["eta1"] = e[0]
         flow_params["env"].additional_params["eta2"] = e[1]
-        flow_params["env"].additional_params["reward_scale"] = rew
+        # flow_params["env"].additional_params["reward_scale"] = rew
         flow_params["env"].additional_params["t_min"] = t
 
         # get the env name and a creator for the environment
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + '_[eta1, eta2]:[{}, {}]'.format(e[0], e[1]) + '_scale:{}'.format(rew) + '_t_min:{}'.format(t)
+        env_name = env_name + '_[eta1, eta2]:[{}, {}]'.format(e[0], e[1]) + '_t_min:{}'.format(t)
         env_name_list.append(env_name)
         # Register as rllib env
         register_env(env_name, create_env)
@@ -168,7 +176,7 @@ if __name__ == "__main__":
             "checkpoint_freq": 25,
             "max_failures": 999,
             "stop": {
-                "training_iteration": 300
+                "training_iteration": 50
             },
             "num_samples": 1,
         }
