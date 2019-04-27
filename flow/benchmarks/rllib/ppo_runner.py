@@ -103,7 +103,7 @@ if __name__ == "__main__":
     # Import the benchmark and fetch its flow_params
     benchmark = __import__(
         "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
-    flow_params = benchmark.flow_params
+    flow_params = benchmark.outflow_rew_flow_params
 
     # get the env name and a creator for the environment
     create_env, env_name = make_create_env(params=flow_params, version=0)
@@ -142,9 +142,8 @@ if __name__ == "__main__":
     config['callbacks']['on_episode_end'] = ray.tune.function(on_episode_end)
 
     # tunning parameters
-    # reward_scale = [1.0]#, 0.5]
-    eta = [[1.0, 5.0], [1.0, 10.0], [1.0, 3.0]]
-    t_min = [5.0, 10.0, 20.0]# , 5.0, 10.0]
+    eta = [[1.0, 0.1, 0.5], [1.0, 0.5, 0.5], [1.0, 1.0, 0.5]]
+    t_min = [3.0, 5.0, 10.0]
     
     env_name_list = []
     i = 0
@@ -155,12 +154,13 @@ if __name__ == "__main__":
 
         flow_params["env"].additional_params["eta1"] = e[0]
         flow_params["env"].additional_params["eta2"] = e[1]
+        flow_params["env"].additional_params["eta3"] = e[2]
         # flow_params["env"].additional_params["reward_scale"] = rew
         flow_params["env"].additional_params["t_min"] = t
 
         # get the env name and a creator for the environment
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + '_[eta1, eta2]:[{}, {}]'.format(e[0], e[1]) + '_t_min:{}'.format(t)
+        env_name = env_name + '_[eta1, eta2, eta3]:[{}, {}, {}]'.format(e[0], e[1], e[2]) + '_t_min:{}'.format(t)
         env_name_list.append(env_name)
         # Register as rllib env
         register_env(env_name, create_env)

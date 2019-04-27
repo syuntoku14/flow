@@ -16,12 +16,16 @@ from flow.core.params import InitialConfig
 from flow.core.params import TrafficLightParams
 
 # use this to specify the environment to run
-from flow.benchmarks.grid1 import flow_params
+
+benchmark_name = 'multi_merge'
+benchmark = __import__(
+    "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
+flow_params = benchmark.flow_params
 
 # number of rollouts per training iteration
 N_ROLLOUTS = 50
 # number of parallel workers
-N_CPUS = 8
+N_CPUS = 3
 
 
 def run_task(*_):

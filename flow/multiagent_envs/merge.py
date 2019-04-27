@@ -20,12 +20,15 @@ ADDITIONAL_ENV_PARAMS = {
     "max_decel": 3,
     # desired velocity for all vehicles in the network, in m/s
     "target_velocity": 25,
+    
+    # not default parameters
     "t_min": 1.0,
     # weigts of cost function
     "eta1": 1.0,
-    "eta2": 0.1,
-    # reward scaling
-    "reward_scale": 1.0
+    "eta2": 0.3,
+    "eta3": 0.5,
+    "reward_scale": 1.0,
+    "FLOW_RATE": 2000
 }
 
 
@@ -247,29 +250,50 @@ class MultiWaveAttenuationMergePOEnvOneRew(MultiWaveAttenuationMergePOEnv):
             return np.mean(rew) if len(rew) != 0 else cost1   
         
 
-class MultiWaveAttenuationMergePOEnvMeanVelRew(MultiWaveAttenuationMergePOEnv):
+class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
     def compute_reward(self, rl_actions, **kwargs):
         """See class definition."""
         if self.env_params.evaluate:
             return np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
         else:
+            ## return a reward of 0 if a collision occurred
+            #if kwargs["fail"]:
+            #    return 0
             
             rew = collections.OrderedDict()
+            info = collections.OrderedDict()
+            
             scale = self.env_params.additional_params["reward_scale"]
             # weights for cost1, cost2, and cost3, respectively
             eta1 = self.env_params.additional_params["eta1"]
             eta2 = self.env_params.additional_params["eta2"]
+            eta3 = self.env_params.additional_params["eta3"]
+            FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
             
             # reward high system-level velocities
-            cost1 = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-
-            # punish accelerations (should lead to reduced stop-and-go waves)
+            cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
+            # print("cost1: {}".format(cost1))
+            mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
+            outflow = self.k.vehicle.get_outflow_rate(600) 
+            if outflow == None:
+                outflow = 0.0
+            
+            # penalize small time headways
+            t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
             for rl_id in self.k.vehicle.get_rl_ids():
                 cost2 = 0.0
-                if rl_actions != None and rl_id in rl_actions:
-                    cost2 -= np.abs(rl_actions[rl_id][0])
-                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0) * scale})
+                lead_id = self.k.vehicle.get_leader(rl_id)
+                if lead_id not in ["", None] \
+                        and self.k.vehicle.get_speed(rl_id) > 0:
+                    t_headway = max(
+                        self.k.vehicle.get_headway(rl_id) /
+                        self.k.vehicle.get_speed(rl_id), 0)
+                    cost2 += min((t_headway - t_min) / t_min, 0.0)
+                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2 + eta3 * outflow / FLOW_RATE, 0.0) * scale})
+                info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
                 if kwargs["fail"]:
                     rew.update({rl_id: 0.0})
+                    info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
                     
-            return rew
+            return rew, info
+
