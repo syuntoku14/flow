@@ -27,6 +27,11 @@ FLOW_RATE_MERGE = 100
 # percent of autonomous vehicles
 RL_PENETRATION = 0.1
 
+# inflow probability
+#FLOW_PROB = 0.2
+#FLOW_PROB_MERGE = 0.05
+#FLOW_PROB_RL = 0.05
+
 # We consider a highway network with an upstream merging lane producing
 # shockwaves
 additional_net_params = deepcopy(ADDITIONAL_NET_PARAMS)
@@ -58,18 +63,21 @@ inflow.add(
     veh_type="human",
     edge="inflow_highway",
     vehs_per_hour=(1 - RL_PENETRATION) * FLOW_RATE,
+    #probability=FLOW_PROB,
     departLane="free",
     departSpeed=10)
 inflow.add(
     veh_type="rl",
     edge="inflow_highway",
     vehs_per_hour=RL_PENETRATION * FLOW_RATE,
+    #probability=FLOW_PROB_MERGE,
     departLane="free",
     departSpeed=10)
 inflow.add(
     veh_type="human",
     edge="inflow_merge",
     vehs_per_hour=FLOW_RATE_MERGE,
+    #probability=FLOW_PROB_RL,
     departLane="free",
     departSpeed=7.5)
 
