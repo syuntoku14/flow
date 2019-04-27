@@ -251,6 +251,11 @@ class MultiWaveAttenuationMergePOEnvOneRew(MultiWaveAttenuationMergePOEnv):
         
 
 class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
+    @property
+    def observation_space(self):
+        """See class definition."""
+        return Box(low=0, high=1, shape=(6, ), dtype=np.float32)
+    
     def compute_reward(self, rl_actions, **kwargs):
         """See class definition."""
         if self.env_params.evaluate:
@@ -296,4 +301,59 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
                     info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
                     
             return rew, info
+        
+    def get_state(self, rl_id=None, **kwargs):
+        """See class definition."""
+        self.leader = []
+        self.follower = []
+
+        # normalizing constants
+        max_speed = self.k.scenario.max_speed()
+        max_length = self.k.scenario.length()
+        
+        left_length = self.k.scenario.edge_length('left')
+
+        obs = collections.OrderedDict()
+        for rl_id in self.k.vehicle.get_rl_ids():
+            this_speed = self.k.vehicle.get_speed(rl_id)
+            lead_id = self.k.vehicle.get_leader(rl_id)
+            follower = self.k.vehicle.get_follower(rl_id)
+            distance_to_merge = left_length
+            current_edge = self.k.vehicle.get_edge(rl_id)
+            
+            if lead_id in ["", None]:
+                # in case leader is not visible
+                lead_speed = max_speed
+                lead_head = max_length
+            else:
+                self.leader.append(lead_id)
+                lead_speed = self.k.vehicle.get_speed(lead_id)
+                lead_head = self.k.vehicle.get_x_by_id(lead_id) \
+                    - self.k.vehicle.get_x_by_id(rl_id) \
+                    - self.k.vehicle.get_length(rl_id)
+
+            if follower in ["", None]:
+                # in case follower is not visible
+                follow_speed = 0
+                follow_head = max_length
+            else:
+                self.follower.append(follower)
+                follow_speed = self.k.vehicle.get_speed(follower)
+                follow_head = self.k.vehicle.get_headway(follower)
+            
+            # distance to the intersection
+            if current_edge == 'left':
+                distance_to_merge -= self.k.vehicle.get_position(rl_id)
+                
+            observation = np.array([
+            this_speed / max_speed,
+            (lead_speed - this_speed) / max_speed,
+            lead_head / max_length,
+            (this_speed - follow_speed) / max_speed,
+            follow_head / max_length,
+            distance_to_merge / left_length
+            ], dtype='float32')
+            obs.update({rl_id: observation})
+        
+        return obs
 

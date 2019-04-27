@@ -142,25 +142,26 @@ if __name__ == "__main__":
     config['callbacks']['on_episode_end'] = ray.tune.function(on_episode_end)
 
     # tunning parameters
-    eta = [[1.0, 0.1, 0.5], [1.0, 0.5, 0.5], [1.0, 1.0, 0.5]]
-    t_min = [3.0, 5.0, 10.0]
+    e2_list = [0.1, 0.5, 1.0, 5.0]
+    e3_list = [0.0, 0.1]
+    t_min = [5.0, 10.0]
     
     env_name_list = []
     i = 0
-    for e, t in product(eta, t_min):
-        i += 1
-        if i == 1:
-            continue
+    for e2, e3, t in product(e2_list, e3_list, t_min):
+        # i += 1
+        # if i == 1:
+        #     continue
 
-        flow_params["env"].additional_params["eta1"] = e[0]
-        flow_params["env"].additional_params["eta2"] = e[1]
-        flow_params["env"].additional_params["eta3"] = e[2]
+        flow_params["env"].additional_params["eta1"] = 1.0# e[0]
+        flow_params["env"].additional_params["eta2"] = e2 # e[1]
+        flow_params["env"].additional_params["eta3"] = e3 # e[2]
         # flow_params["env"].additional_params["reward_scale"] = rew
         flow_params["env"].additional_params["t_min"] = t
 
         # get the env name and a creator for the environment
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + '_[eta1, eta2, eta3]:[{}, {}, {}]'.format(e[0], e[1], e[2]) + '_t_min:{}'.format(t)
+        env_name = env_name + '_[eta1, eta2, eta3]:[{}, {}, {}]'.format(1.0, e2, e3) + '_t_min:{}'.format(t)
         env_name_list.append(env_name)
         # Register as rllib env
         register_env(env_name, create_env)
