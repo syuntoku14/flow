@@ -5,6 +5,7 @@ This environment was used in:
 TODO(ak): add paper after it has been published.
 """
 
+from copy import deepcopy
 from flow.multiagent_envs.multiagent_env import MultiEnv
 from flow.core import rewards
 
@@ -154,7 +155,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                     cost2 += min((t_headway - t_min) / t_min, 0.0)
                     # print("cost2: {}".format(cost2))
                 rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0) * scale})
-                info.update({rl_id: {'cost1': cost1 * eta1, 'cost2': cost2 * eta2, 'mean_vel': mean_vel, "outflow": outflow}})
+                info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
                 if kwargs["fail"]:
                     rew.update({rl_id: 0.0})
                     info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
@@ -251,6 +252,7 @@ class MultiWaveAttenuationMergePOEnvOneRew(MultiWaveAttenuationMergePOEnv):
         
 
 class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
+
     @property
     def observation_space(self):
         """See class definition."""
@@ -357,3 +359,103 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
         
         return obs
 
+    
+class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOutFlowRew):
+    def __init__(self, env_params, sim_params, scenario, simulator='traci'):
+        for p in ADDITIONAL_ENV_PARAMS.keys():
+            if p not in env_params.additional_params:
+                raise KeyError(
+                    'Environment parameter "{}" not supplied'.format(p))
+
+        # queue of rl vehicles waiting to be controlled
+        self.rl_queue = collections.deque()
+        # names of the rl vehicles controlled at any step
+        self.rl_veh = []
+        # used for visualization
+        self.leader = []
+        self.follower = []
+        
+        # historical observation
+        self.buffered_obs = {}
+        self.buffer_length = 3
+        super().__init__(env_params, sim_params, scenario, simulator)
+    
+    @property
+    def observation_space(self):
+        """See class definition."""
+        return Box(low=0, high=1, shape=(6*self.buffer_length, ), dtype=np.float32)
+        
+    def _get_state(self, rl_id=None, **kwargs):
+        """See class definition."""
+        self.leader = []
+        self.follower = []
+
+        # normalizing constants
+        max_speed = self.k.scenario.max_speed()
+        max_length = self.k.scenario.length()
+        
+        left_length = self.k.scenario.edge_length('left')
+
+        obs = collections.OrderedDict()
+        for rl_id in self.k.vehicle.get_rl_ids():
+            this_speed = self.k.vehicle.get_speed(rl_id)
+            lead_id = self.k.vehicle.get_leader(rl_id)
+            follower = self.k.vehicle.get_follower(rl_id)
+            distance_to_merge = left_length
+            current_edge = self.k.vehicle.get_edge(rl_id)
+            
+            if lead_id in ["", None]:
+                # in case leader is not visible
+                lead_speed = max_speed
+                lead_head = max_length
+            else:
+                self.leader.append(lead_id)
+                lead_speed = self.k.vehicle.get_speed(lead_id)
+                lead_head = self.k.vehicle.get_x_by_id(lead_id) \
+                    - self.k.vehicle.get_x_by_id(rl_id) \
+                    - self.k.vehicle.get_length(rl_id)
+
+            if follower in ["", None]:
+                # in case follower is not visible
+                follow_speed = 0
+                follow_head = max_length
+            else:
+                self.follower.append(follower)
+                follow_speed = self.k.vehicle.get_speed(follower)
+                follow_head = self.k.vehicle.get_headway(follower)
+            
+            # distance to the intersection
+            if current_edge == 'left':
+                distance_to_merge -= self.k.vehicle.get_position(rl_id)
+                
+            observation = np.array([
+            this_speed / max_speed,
+            (lead_speed - this_speed) / max_speed,
+            lead_head / max_length,
+            (this_speed - follow_speed) / max_speed,
+            follow_head / max_length,
+            distance_to_merge / left_length
+            ], dtype='float32')
+            obs.update({rl_id: observation})
+        
+        return obs
+
+    def get_state(self, rl_id=None, **kwargs):
+        obs = self._get_state(rl_id, **kwargs)
+        # add new car to buffered obs
+        for key in obs.keys():
+            if not key in self.buffered_obs:
+                self.buffered_obs[key] = np.zeros(self.observation_space.shape, 'float32')
+        # remvove exited car from buffered obs
+        keys = deepcopy(list(self.buffered_obs.keys()))
+        for key in keys:
+            if not key in obs:
+                self.buffered_obs.pop(key)
+                
+        # update buffered_obs
+        for key, value in obs.items():
+            obs_len = len(value)
+            self.buffered_obs[key] = self.buffered_obs[key][obs_len:]
+            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], value))
+        
+        return self.buffered_obs

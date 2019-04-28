@@ -91,6 +91,7 @@ def on_episode_end(info):
     episode.custom_metrics["system_level_velocity"] = mean_vel
     episode.custom_metrics["outflow_rate"] = outflow
 
+    
 if __name__ == "__main__":
     args = parser.parse_args()
     # benchmark name
@@ -99,59 +100,66 @@ if __name__ == "__main__":
     num_rollouts = args.num_rollouts
     # number of parallel workers
     num_cpus = args.num_cpus
-
-    # Import the benchmark and fetch its flow_params
-    benchmark = __import__(
-        "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
-    flow_params = benchmark.outflow_rew_flow_params
-
-    # get the env name and a creator for the environment
-    create_env, env_name = make_create_env(params=flow_params, version=0)
-
     # initialize a ray instance
     ray.init()
-
+    
     alg_run = "PPO"
 
-    horizon = flow_params["env"].horizon
-    agent_cls = get_agent_class(alg_run)
-    config = agent_cls._default_config.copy()
-    config["num_workers"] = min(num_cpus, num_rollouts)
-    config["train_batch_size"] = horizon * num_rollouts
-    config["use_gae"] = True
-    config["horizon"] = horizon
-    gae_lambda = 0.97
-    step_size = 5e-4
-    config["lambda"] = gae_lambda
-    config["lr"] = step_size
-    config["vf_clip_param"] = 1e6
-    config["num_sgd_iter"] = 10
-    config['clip_actions'] = False  # FIXME(ev) temporary ray bug
-    config["model"]["fcnet_hiddens"] = [100, 50, 25]
-    config["observation_filter"] = "NoFilter"
-    config["entropy_coeff"] = 0.0
-
-    # save the flow params for replay
-    flow_json = json.dumps(
-        flow_params, cls=FlowParamsEncoder, sort_keys=True, indent=4)
-    config['env_config']['flow_params'] = flow_json
-    config['env_config']['run'] = alg_run
-
-    config['callbacks']['on_episode_start'] = ray.tune.function(on_episode_start)
-    config['callbacks']['on_episode_step'] = ray.tune.function(on_episode_step)
-    config['callbacks']['on_episode_end'] = ray.tune.function(on_episode_end)
-
     # tunning parameters
-    e2_list = [0.1, 0.5, 1.0, 5.0]
+    e2_list = [0.1]
     e3_list = [0.0, 0.1]
-    t_min = [5.0, 10.0]
+    t_min = [10.0]
+    methods = ['default', 'merge_distance', 'buffered_obs']
     
     env_name_list = []
+    config_list = []
     i = 0
-    for e2, e3, t in product(e2_list, e3_list, t_min):
+    for e2, e3, t, method in product(e2_list, e3_list, t_min, methods):
         # i += 1
         # if i == 1:
         #     continue
+        
+        # Import the benchmark and fetch its flow_params
+        benchmark = __import__(
+            "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
+        
+        flow_params = benchmark.flow_params    
+        if method == "merge_distance":
+            flow_params = benchmark.outflow_rew_flow_params
+        elif method == "buffered_obs":
+            flow_params = benchmark.buffered_obs_flow_params
+            
+        # get the env name and a creator for the environment
+        create_env, env_name = make_create_env(params=flow_params, version=0)
+        
+        # create config
+        horizon = flow_params["env"].horizon
+        agent_cls = get_agent_class(alg_run)
+        config = agent_cls._default_config.copy()
+        config["num_workers"] = min(num_cpus, num_rollouts)
+        config["train_batch_size"] = horizon * num_rollouts
+        config["use_gae"] = True
+        config["horizon"] = horizon
+        gae_lambda = 0.97
+        step_size = 5e-4
+        config["lambda"] = gae_lambda
+        config["lr"] = step_size
+        config["vf_clip_param"] = 1e6
+        config["num_sgd_iter"] = 10
+        config['clip_actions'] = False  # FIXME(ev) temporary ray bug
+        config["model"]["fcnet_hiddens"] = [100, 50, 25]
+        config["observation_filter"] = "NoFilter"
+        config["entropy_coeff"] = 0.0
+
+        # save the flow params for replay
+        flow_json = json.dumps(
+            flow_params, cls=FlowParamsEncoder, sort_keys=True, indent=4)
+        config['env_config']['flow_params'] = flow_json
+        config['env_config']['run'] = alg_run
+
+        config['callbacks']['on_episode_start'] = ray.tune.function(on_episode_start)
+        config['callbacks']['on_episode_step'] = ray.tune.function(on_episode_step)
+        config['callbacks']['on_episode_end'] = ray.tune.function(on_episode_end)
 
         flow_params["env"].additional_params["eta1"] = 1.0# e[0]
         flow_params["env"].additional_params["eta2"] = e2 # e[1]
@@ -163,11 +171,12 @@ if __name__ == "__main__":
         create_env, env_name = make_create_env(params=flow_params, version=0)
         env_name = env_name + '_[eta1, eta2, eta3]:[{}, {}, {}]'.format(1.0, e2, e3) + '_t_min:{}'.format(t)
         env_name_list.append(env_name)
+        config_list.append(config)
         # Register as rllib env
         register_env(env_name, create_env)
 
     exp_list = []
-    for env_name in env_name_list:
+    for config, env_name in zip(config_list, env_name_list):
         exp_tag = {
             "run": alg_run,
             "env": env_name,
