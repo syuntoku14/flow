@@ -16,11 +16,8 @@ import collections
 
 class MultiEnv(MultiAgentEnv, Env):
     """Multi-agent version of base env. See parent class for info"""
-
+ 
     def step(self, rl_actions):
-        return self._step(rl_actions)
-    
-    def _step(self, rl_actions):
         """Advance the environment by one step.
 
         Assigns actions to autonomous and human-driven agents (i.e. vehicles,

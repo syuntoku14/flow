@@ -6,8 +6,10 @@ TODO(ak): add paper after it has been published.
 """
 
 from copy import deepcopy
+import numpy as np
 from flow.multiagent_envs.multiagent_env import MultiEnv
 from flow.core import rewards
+from flow.core.params import InFlows
 
 from gym.spaces.box import Box
 
@@ -26,10 +28,12 @@ ADDITIONAL_ENV_PARAMS = {
     "t_min": 1.0,
     # weigts of cost function
     "eta1": 1.0,
-    "eta2": 0.3,
-    "eta3": 0.5,
+    "eta2": 0.2,
+    "eta3": 0.1,
     "reward_scale": 1.0,
-    "FLOW_RATE": 2000
+    "FLOW_RATE": 2000,
+    "FLOW_RATE_MERGE": 100,
+    "RL_PENETRATION": 0.1
 }
 
 
@@ -213,7 +217,7 @@ class MultiWaveAttenuationMergePOEnvOneRew(MultiWaveAttenuationMergePOEnv):
     Done: return only '__all__'
     """
     def step(self, rl_actions):
-        states, reward, done, info = self._step(rl_actions)
+        states, reward, done, info = super().step(rl_actions)
         done = done['__all__']
         return states, reward, done, info
 
@@ -361,87 +365,26 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
 
     
 class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOutFlowRew):
-    def __init__(self, env_params, sim_params, scenario, simulator='traci'):
-        for p in ADDITIONAL_ENV_PARAMS.keys():
-            if p not in env_params.additional_params:
-                raise KeyError(
-                    'Environment parameter "{}" not supplied'.format(p))
-
-        # queue of rl vehicles waiting to be controlled
-        self.rl_queue = collections.deque()
-        # names of the rl vehicles controlled at any step
-        self.rl_veh = []
-        # used for visualization
-        self.leader = []
-        self.follower = []
-        
+    # obs: 3xobs + traffic info
+    def __init__(self, env_params, sim_params, scenario, simulator='traci'):       
+        super().__init__(env_params, sim_params, scenario, simulator)
         # historical observation
         self.buffered_obs = {}
         self.buffer_length = 3
-        super().__init__(env_params, sim_params, scenario, simulator)
-    
+        self.FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
+        self.FLOW_RATE_MERGE = self.env_params.additional_params["FLOW_RATE_MERGE"] 
+        self.RL_PENETRATION = self.env_params.additional_params["RL_PENETRATION"]
+        self.flow_rate = self.FLOW_RATE
+        self.flow_rate_merge = self.FLOW_RATE_MERGE
+        self.rl_penetration = self.RL_PENETRATION
+        
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6*self.buffer_length, ), dtype=np.float32)
-        
-    def _get_state(self, rl_id=None, **kwargs):
-        """See class definition."""
-        self.leader = []
-        self.follower = []
-
-        # normalizing constants
-        max_speed = self.k.scenario.max_speed()
-        max_length = self.k.scenario.length()
-        
-        left_length = self.k.scenario.edge_length('left')
-
-        obs = collections.OrderedDict()
-        for rl_id in self.k.vehicle.get_rl_ids():
-            this_speed = self.k.vehicle.get_speed(rl_id)
-            lead_id = self.k.vehicle.get_leader(rl_id)
-            follower = self.k.vehicle.get_follower(rl_id)
-            distance_to_merge = left_length
-            current_edge = self.k.vehicle.get_edge(rl_id)
-            
-            if lead_id in ["", None]:
-                # in case leader is not visible
-                lead_speed = max_speed
-                lead_head = max_length
-            else:
-                self.leader.append(lead_id)
-                lead_speed = self.k.vehicle.get_speed(lead_id)
-                lead_head = self.k.vehicle.get_x_by_id(lead_id) \
-                    - self.k.vehicle.get_x_by_id(rl_id) \
-                    - self.k.vehicle.get_length(rl_id)
-
-            if follower in ["", None]:
-                # in case follower is not visible
-                follow_speed = 0
-                follow_head = max_length
-            else:
-                self.follower.append(follower)
-                follow_speed = self.k.vehicle.get_speed(follower)
-                follow_head = self.k.vehicle.get_headway(follower)
-            
-            # distance to the intersection
-            if current_edge == 'left':
-                distance_to_merge -= self.k.vehicle.get_position(rl_id)
-                
-            observation = np.array([
-            this_speed / max_speed,
-            (lead_speed - this_speed) / max_speed,
-            lead_head / max_length,
-            (this_speed - follow_speed) / max_speed,
-            follow_head / max_length,
-            distance_to_merge / left_length
-            ], dtype='float32')
-            obs.update({rl_id: observation})
-        
-        return obs
+        return Box(low=0, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
 
     def get_state(self, rl_id=None, **kwargs):
-        obs = self._get_state(rl_id, **kwargs)
+        obs = super().get_state(rl_id, **kwargs)
         # add new car to buffered obs
         for key in obs.keys():
             if not key in self.buffered_obs:
@@ -455,7 +398,47 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
         # update buffered_obs
         for key, value in obs.items():
             obs_len = len(value)
-            self.buffered_obs[key] = self.buffered_obs[key][obs_len:]
+            self.buffered_obs[key] = self.buffered_obs[key][obs_len:-3]
             self.buffered_obs[key] = np.hstack((self.buffered_obs[key], value))
+            traffic_info = np.array([self.flow_rate / 3600, self.flow_rate_merge / 3600, self.rl_penetration])
+            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], traffic_info))
         
         return self.buffered_obs
+
+    def reset(self):
+        """See parent class.
+
+        In addition, a few variables that are specific to this class are
+        emptied before they are used by the new rollout.
+        """
+        self.buffered_obs = {}
+        
+        # perturbe the traffic condition
+        self.flow_rate = self.FLOW_RATE * (0.85 + np.random.rand()*0.3)
+        self.flow_rate_merge = self.FLOW_RATE_MERGE * (0.85 + np.random.rand()*0.3)
+        self.rl_penetration = self.RL_PENETRATION * (0.9 + np.random.rand()*0.2)
+        
+        inflow = InFlows()
+        inflow.add(
+            veh_type="human",
+            edge="inflow_highway",
+            vehs_per_hour=int((1 - self.rl_penetration) * self.flow_rate),
+            #probability=FLOW_PROB,
+            departLane="free",
+            departSpeed=10)
+        inflow.add(
+            veh_type="rl",
+            edge="inflow_highway",
+            vehs_per_hour=int(self.rl_penetration * self.flow_rate),
+            #probability=FLOW_PROB_MERGE,
+            departLane="free",
+            departSpeed=10)
+        inflow.add(
+            veh_type="human",
+            edge="inflow_merge",
+            vehs_per_hour=self.flow_rate_merge,
+            #probability=FLOW_PROB_RL,
+            departLane="free",
+            departSpeed=7.5)
+        self.scenario.net_params.inflows = inflow
+        return super().reset()

@@ -115,7 +115,9 @@ flow_params = dict(
             "eta3": 0.5,
             "reward_scale": 1.0,
             "t_min": 1.0,
-            "FLOW_RATE": FLOW_RATE
+            "FLOW_RATE": FLOW_RATE,
+            "FLOW_RATE_MERGE": FLOW_RATE_MERGE,
+            "RL_PENETRATION": RL_PENETRATION
         },
     ),
 
