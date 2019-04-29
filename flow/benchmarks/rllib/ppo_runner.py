@@ -106,10 +106,10 @@ if __name__ == "__main__":
     alg_run = "PPO"
 
     # tunning parameters
-    e2_list = [0.2]
-    e3_list = [0.3]
+    e2_list = [0.1, 0.3]
+    e3_list = [0.1, 0.3]
     t_min = [10.0]
-    methods = ['merge_distance'] # 'buffered_obs']
+    methods = ['buffered_obs']
     
     env_name_list = []
     config_list = []
@@ -147,9 +147,8 @@ if __name__ == "__main__":
         config["vf_clip_param"] = 1e6
         config["num_sgd_iter"] = 10
         config['clip_actions'] = False  # FIXME(ev) temporary ray bug
-        config["model"]["fcnet_hiddens"] = [100, 50, 25]
-        config["model"]["use_lstm"] = True
-        config["observation_filter"] = "NoFilter"
+        config["model"]["fcnet_hiddens"] = [128, 64, 32]
+        config["observation_filter"] = "MeanStdFilter"
         config["entropy_coeff"] = 0.0
 
         # save the flow params for replay
@@ -187,7 +186,7 @@ if __name__ == "__main__":
             "checkpoint_freq": 25,
             "max_failures": 999,
             "stop": {
-                "training_iteration": 50
+                "training_iteration": 200
             },
             "num_samples": 1,
         }
