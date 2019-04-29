@@ -4,10 +4,11 @@ this runner script is executed on. This file runs the PPO algorithm in rllib
 and utilizes the hyper-parameters specified in:
 Proximal Policy Optimization Algorithms by Schulman et. al.
 """
-import json
+import json, pickle
 import argparse
 from itertools import product
 import numpy as np
+from flow.core.params import InFlows
 
 import ray
 try:
@@ -91,9 +92,13 @@ def on_episode_end(info):
     episode.custom_metrics["system_level_velocity"] = mean_vel
     episode.custom_metrics["outflow_rate"] = outflow
 
-    
 if __name__ == "__main__":
     args = parser.parse_args()
+    # base environment to resume training
+    base = '/headless/ray_results/resume/' + \
+        'PPO_MultiWaveAttenuationMergePOEnvBufferedObs-v0_[FLOW_RATE, FLOW_RATE_MERGE, RL_PENETRATION]:[2097,146,0.127]_0_2019-04-28_23-23-18c2m88oa_'
+    checkpoint = 250
+    config_path = base + '/params.pkl'
     # benchmark name
     benchmark_name = args.benchmark_name
     # number of rollouts per training iteration
@@ -103,92 +108,70 @@ if __name__ == "__main__":
     # initialize a ray instance
     ray.init()
     
-    alg_run = "PPO"
-
-    # tunning parameters
-    e2_list = [0.2]
-    e3_list = [0.3]
-    t_min = [10.0]
-    methods = ['merge_distance'] # 'buffered_obs']
+    # training_iter
+    training_iter = 1
+    exp_list = []
     
-    env_name_list = []
-    config_list = []
-    i = 0
-    for e2, e3, t, method in product(e2_list, e3_list, t_min, methods):
-        # i += 1
-        # if i == 1:
-        #     continue
-        
-        # Import the benchmark and fetch its flow_params
+    for i in range(training_iter):
         benchmark = __import__(
             "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
+        flow_params = benchmark.buffered_obs_flow_params
         
-        flow_params = benchmark.flow_params    
-        if method == "merge_distance":
-            flow_params = benchmark.outflow_rew_flow_params
-        elif method == "buffered_obs":
-            flow_params = benchmark.buffered_obs_flow_params
-            
-        # get the env name and a creator for the environment
+        # inflow rate at the highway
+        FLOW_RATE = np.random.randint(1900, 2300)
+        FLOW_RATE_MERGE = np.random.randint(90, 150)
+        # percent of autonomous vehicles
+        RL_PENETRATION = 0.08 + np.random.rand() * 0.1
+
+        inflow = InFlows()
+        inflow.add(
+            veh_type="human",
+            edge="inflow_highway",
+            vehs_per_hour=int((1 - RL_PENETRATION) * FLOW_RATE),
+            #probability=FLOW_PROB,
+            departLane="free",
+            departSpeed=10)
+        inflow.add(
+            veh_type="rl",
+            edge="inflow_highway",
+            vehs_per_hour=int(RL_PENETRATION * FLOW_RATE),
+            #probability=FLOW_PROB_MERGE,
+            departLane="free",
+            departSpeed=10)
+        inflow.add(
+            veh_type="human",
+            edge="inflow_merge",
+            vehs_per_hour=FLOW_RATE_MERGE,
+            #probability=FLOW_PROB_RL,
+            departLane="free",
+            departSpeed=7.5)
+
+        # generate new flow_params
+        net = flow_params['net']
+        net.inflows = inflow
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        
-        # create config
-        horizon = flow_params["env"].horizon
-        agent_cls = get_agent_class(alg_run)
-        config = agent_cls._default_config.copy()
-        config["num_workers"] = min(num_cpus, num_rollouts)
-        config["train_batch_size"] = horizon * num_rollouts
-        config["use_gae"] = True
-        config["horizon"] = horizon
-        gae_lambda = 0.97
-        step_size = 5e-4
-        config["lambda"] = gae_lambda
-        config["lr"] = step_size
-        config["vf_clip_param"] = 1e6
-        config["num_sgd_iter"] = 10
-        config['clip_actions'] = False  # FIXME(ev) temporary ray bug
-        config["model"]["fcnet_hiddens"] = [100, 50, 25]
-        config["model"]["use_lstm"] = True
-        config["observation_filter"] = "NoFilter"
-        config["entropy_coeff"] = 0.0
-
-        # save the flow params for replay
-        flow_json = json.dumps(
-            flow_params, cls=FlowParamsEncoder, sort_keys=True, indent=4)
-        config['env_config']['flow_params'] = flow_json
-        config['env_config']['run'] = alg_run
-
-        config['callbacks']['on_episode_start'] = ray.tune.function(on_episode_start)
-        config['callbacks']['on_episode_step'] = ray.tune.function(on_episode_step)
-        config['callbacks']['on_episode_end'] = ray.tune.function(on_episode_end)
-
-        flow_params["env"].additional_params["eta1"] = 1.0# e[0]
-        flow_params["env"].additional_params["eta2"] = e2 # e[1]
-        flow_params["env"].additional_params["eta3"] = e3 # e[2]
-        # flow_params["env"].additional_params["reward_scale"] = rew
-        flow_params["env"].additional_params["t_min"] = t
-
-        # get the env name and a creator for the environment
-        create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + '_[eta1, eta2, eta3]:[{}, {}, {}]'.format(1.0, e2, e3) + '_t_min:{}'.format(t)
-        env_name_list.append(env_name)
-        config_list.append(config)
+        env_name = env_name + '_[FLOW_RATE, FLOW_RATE_MERGE, RL_PENETRATION]:[{},{},{:.3f}]'.format(FLOW_RATE, FLOW_RATE_MERGE, RL_PENETRATION)
         # Register as rllib env
         register_env(env_name, create_env)
-
-    exp_list = []
-    for config, env_name in zip(config_list, env_name_list):
+        
+        checkpoint_path = base + '/checkpoint_{}/checkpoint-{}'.format(checkpoint, checkpoint)
+        config_path = base + '/params.pkl'
+        
+        with open(config_path, mode='rb') as f:
+            config = pickle.load(f)
         exp_tag = {
-            "run": alg_run,
+            "run": 'PPO',
             "env": env_name,
             "config": {
                 **config
             },
             "checkpoint_freq": 25,
+            "checkpoint_at_end": True,
             "max_failures": 999,
             "stop": {
-                "training_iteration": 50
+                "training_iteration": checkpoint + 50
             },
+            "restore": checkpoint_path,
             "num_samples": 1,
         }
         exp_list.append(Experiment.from_json(args.exp_tag, exp_tag))
