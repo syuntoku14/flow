@@ -106,9 +106,9 @@ if __name__ == "__main__":
     alg_run = "PPO"
 
     # tunning parameters
-    e2_list = [0.1, 0.3]
-    e3_list = [0.1, 0.3]
-    t_min = [10.0]
+    e2_list = [0.1]
+    e3_list = [0.0, 0.1]
+    t_min = [1.0]
     methods = ['buffered_obs']
     
     env_name_list = []
@@ -147,9 +147,8 @@ if __name__ == "__main__":
         config["vf_clip_param"] = 1e6
         config["num_sgd_iter"] = 10
         config['clip_actions'] = False  # FIXME(ev) temporary ray bug
-        config["model"]["fcnet_hiddens"] = [128, 64, 32]
-        config["observation_filter"] = "MeanStdFilter"
-        config["entropy_coeff"] = 0.0
+        config["model"]["fcnet_hiddens"] = [100, 50, 25]
+        config["observation_filter"] = "NoFilter"
 
         # save the flow params for replay
         flow_json = json.dumps(
@@ -169,7 +168,7 @@ if __name__ == "__main__":
 
         # get the env name and a creator for the environment
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + '_[eta1, eta2, eta3]:[{}, {}, {}]'.format(1.0, e2, e3) + '_t_min:{}'.format(t)
+        env_name = env_name + 'bottom_[eta1, eta2, eta3]:[{}, {}, {}]'.format(1.0, e2, e3) + '_t_min:{}'.format(t)
         env_name_list.append(env_name)
         config_list.append(config)
         # Register as rllib env

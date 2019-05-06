@@ -256,11 +256,13 @@ class MultiWaveAttenuationMergePOEnvOneRew(MultiWaveAttenuationMergePOEnv):
         
 
 class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
-
+    """
+    Observation: (v_lead, v_lag, v, h_lead, h_lag, distance_to_merge, left_density, bottom_density)
+    """
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6, ), dtype=np.float32)
+        return Box(low=0, high=1, shape=(8, ), dtype=np.float32)
     
     def compute_reward(self, rl_actions, **kwargs):
         """See class definition."""
@@ -318,7 +320,12 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
         max_length = self.k.scenario.length()
         
         left_length = self.k.scenario.edge_length('left')
-
+        bottom_length = self.k.scenario.edge_length('bottom')
+        left_car_ids = self.k.vehicle.get_ids_by_edge('left')
+        bottom_car_ids = self.k.vehicle.get_ids_by_edge('bottom')
+        left_density = np.sum(self.k.vehicle.get_length(left_car_ids)) / left_length
+        bottom_density = np.sum(self.k.vehicle.get_length(bottom_car_ids)) / bottom_length
+        
         obs = collections.OrderedDict()
         for rl_id in self.k.vehicle.get_rl_ids():
             this_speed = self.k.vehicle.get_speed(rl_id)
@@ -357,7 +364,9 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
             lead_head / max_length,
             (this_speed - follow_speed) / max_speed,
             follow_head / max_length,
-            distance_to_merge / left_length
+            distance_to_merge / left_length,
+            left_density,
+            bottom_density
             ], dtype='float32')
             obs.update({rl_id: observation})
         
@@ -381,7 +390,7 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
+        return Box(low=0, high=1, shape=(8*self.buffer_length + 3, ), dtype=np.float32)
 
     def get_state(self, rl_id=None, **kwargs):
         obs = super().get_state(rl_id, **kwargs)

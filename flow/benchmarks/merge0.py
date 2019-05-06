@@ -17,9 +17,10 @@ from flow.core.params import VehicleParams
 from flow.controllers import SimCarFollowingController, RLController
 
 # time horizon of a single rollout
-HORIZON = 750
+HORIZON = 1500
 # inflow rate at the highway
 FLOW_RATE = 2000
+FLOW_RATE_MERGE = 100
 # percent of autonomous vehicles
 RL_PENETRATION = 0.1
 # num_rl term (see ADDITIONAL_ENV_PARAMs)
@@ -67,7 +68,7 @@ inflow.add(
 inflow.add(
     veh_type="human",
     edge="inflow_merge",
-    vehs_per_hour=100,
+    vehs_per_hour=FLOW_RATE_MERGE,
     departLane="free",
     departSpeed=7.5)
 
@@ -87,7 +88,7 @@ flow_params = dict(
     # sumo-related parameters (see flow.core.params.SumoParams)
     sim=SumoParams(
         restart_instance=True,
-        sim_step=0.5,
+        sim_step=0.2,
         render=False,
     ),
 
@@ -101,6 +102,9 @@ flow_params = dict(
             "max_decel": 1.5,
             "target_velocity": 20,
             "num_rl": NUM_RL,
+            "FLOW_RATE": FLOW_RATE,
+            "FLOW_RATE_MERGE": FLOW_RATE_MERGE,
+            "RL_PENETRATION": RL_PENETRATION
         },
     ),
 
