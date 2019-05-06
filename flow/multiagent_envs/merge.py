@@ -148,7 +148,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
-            for rl_id in self.k.vehicle.get_rl_ids():
+            for rl_id in rl_actions:
                 cost2 = 0.0
                 lead_id = self.k.vehicle.get_leader(rl_id)
                 if lead_id not in ["", None] \
@@ -210,50 +210,6 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         self.follower = []
         return super().reset()
     
-    
-class MultiWaveAttenuationMergePOEnvOneRew(MultiWaveAttenuationMergePOEnv):
-    """
-    Reward: mean reward of the each agents
-    Done: return only '__all__'
-    """
-    def step(self, rl_actions):
-        states, reward, done, info = super().step(rl_actions)
-        done = done['__all__']
-        return states, reward, done, info
-
-    def compute_reward(self, rl_actions, **kwargs):
-        """See class definition."""
-        if self.env_params.evaluate:
-            return np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-        else:
-            ## return a reward of 0 if a collision occurred
-            #if kwargs["fail"]:
-            #    return 0
-            
-            rew = []
-            # weights for cost1, cost2, and cost3, respectively
-            eta1, eta2 = 1.00, 0.10
-            
-            # reward high system-level velocities
-            cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
-
-            # penalize small time headways
-            t_min = 1  # smallest acceptable time headway
-            for rl_id in self.k.vehicle.get_rl_ids():
-                cost2 = 0.0
-                lead_id = self.k.vehicle.get_leader(rl_id)
-                if lead_id not in ["", None] \
-                        and self.k.vehicle.get_speed(rl_id) > 0:
-                    t_headway = max(
-                        self.k.vehicle.get_headway(rl_id) /
-                        self.k.vehicle.get_speed(rl_id), 0)
-                    cost2 += min((t_headway - t_min) / t_min, 0.0)
-                rew.append(max(eta1 * cost1 + eta2 * cost2, 0.0))
-                if kwargs["fail"]:
-                    rew.append(0.0)
-            
-            return np.mean(rew) if len(rew) != 0 else cost1   
-        
 
 class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
     """
@@ -293,20 +249,21 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
             
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
-            for rl_id in self.k.vehicle.get_rl_ids():
-                cost2 = 0.0
-                lead_id = self.k.vehicle.get_leader(rl_id)
-                if lead_id not in ["", None] \
-                        and self.k.vehicle.get_speed(rl_id) > 0:
-                    t_headway = max(
-                        self.k.vehicle.get_headway(rl_id) /
-                        self.k.vehicle.get_speed(rl_id), 0)
-                    cost2 += min((t_headway - t_min) / t_min, 0.0)
-                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2 + eta3 * outflow / FLOW_RATE, 0.0) * scale})
-                info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
-                if kwargs["fail"]:
-                    rew.update({rl_id: 0.0})
+            if rl_actions is not None:    
+                for rl_id in rl_actions:
+                    cost2 = 0.0
+                    lead_id = self.k.vehicle.get_leader(rl_id)
+                    if lead_id not in ["", None] \
+                            and self.k.vehicle.get_speed(rl_id) > 0:
+                        t_headway = max(
+                            self.k.vehicle.get_headway(rl_id) /
+                            self.k.vehicle.get_speed(rl_id), 0)
+                        cost2 += min((t_headway - t_min) / t_min, 0.0)
+                    rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2 + eta3 * outflow / FLOW_RATE, 0.0) * scale})
                     info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
+                    if kwargs["fail"]:
+                        rew.update({rl_id: 0.0})
+                        info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
                     
             return rew, info
         
@@ -333,6 +290,10 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
             follower = self.k.vehicle.get_follower(rl_id)
             distance_to_merge = left_length
             current_edge = self.k.vehicle.get_edge(rl_id)
+            
+            # don't control cars in inflow edge, 
+            if 'inflow' in current_edge:
+                continue
             
             if lead_id in ["", None]:
                 # in case leader is not visible

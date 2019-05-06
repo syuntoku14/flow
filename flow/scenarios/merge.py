@@ -5,7 +5,7 @@ from flow.core.params import InitialConfig
 from flow.core.params import TrafficLightParams
 from numpy import pi, sin, cos
 
-INFLOW_EDGE_LEN = 100  # length of the inflow edges (needed for resets)
+INFLOW_EDGE_LEN = 200  # length of the inflow edges (needed for resets)
 VEHICLE_LENGTH = 5
 
 ADDITIONAL_NET_PARAMS = {
