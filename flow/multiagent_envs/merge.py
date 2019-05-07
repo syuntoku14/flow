@@ -148,7 +148,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
-            for rl_id in rl_actions:
+            for rl_id in self.k.vehicle.get_rl_ids():
                 cost2 = 0.0
                 lead_id = self.k.vehicle.get_leader(rl_id)
                 if lead_id not in ["", None] \
@@ -250,7 +250,12 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
             if rl_actions is not None:    
-                for rl_id in rl_actions:
+                for rl_id in self.k.vehicle.get_rl_ids():
+                    current_edge = self.k.vehicle.get_edge(rl_id)
+                    # don't control cars in inflow edge, 
+                    if 'inflow' in current_edge:
+                        continue
+                        
                     cost2 = 0.0
                     lead_id = self.k.vehicle.get_leader(rl_id)
                     if lead_id not in ["", None] \
