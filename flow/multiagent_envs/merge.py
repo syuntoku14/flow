@@ -33,7 +33,7 @@ ADDITIONAL_ENV_PARAMS = {
     "reward_scale": 1.0,
     "FLOW_RATE": 2000,
     "FLOW_RATE_MERGE": 100,
-    "RL_PENETRATION": 0.1
+    "RL_PENETRATION": 0.2
 }
 
 

@@ -37,7 +37,7 @@ RL_PENETRATION = 0.1
 additional_net_params = deepcopy(ADDITIONAL_NET_PARAMS)
 additional_net_params["merge_lanes"] = 1
 additional_net_params["highway_lanes"] = 1
-additional_net_params["pre_merge_length"] = 600
+additional_net_params["pre_merge_length"] = 1000
 
 # RL vehicles constitute 5% of the total number of vehicles
 vehicles = VehicleParams()
