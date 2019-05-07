@@ -22,7 +22,7 @@ HORIZON = 1500
 SIM_STEP = 0.2  # same as 300 seconds
 WARMUP = 100
 # inflow rate at the highway
-FLOW_RATE = 2000
+FLOW_RATE = 1700
 FLOW_RATE_MERGE = 100
 # percent of autonomous vehicles
 RL_PENETRATION = 0.1
@@ -37,7 +37,7 @@ RL_PENETRATION = 0.1
 additional_net_params = deepcopy(ADDITIONAL_NET_PARAMS)
 additional_net_params["merge_lanes"] = 1
 additional_net_params["highway_lanes"] = 1
-additional_net_params["pre_merge_length"] = 1000
+additional_net_params["pre_merge_length"] = 600
 
 # RL vehicles constitute 5% of the total number of vehicles
 vehicles = VehicleParams()
