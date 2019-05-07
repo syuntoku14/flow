@@ -36,6 +36,7 @@ ADDITIONAL_ENV_PARAMS = {
     "RL_PENETRATION": 0.2
 }
 
+OUTFLOW_RATE_SPAN = 50
 
 class MultiWaveAttenuationMergePOEnv(MultiEnv):
 
@@ -144,7 +145,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
             # print("cost1: {}".format(cost1))
             mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-            outflow = self.k.vehicle.get_outflow_rate(600)
+            outflow = self.k.vehicle.get_outflow_rate(OUTFLOW_RATE_SPAN)
             
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
@@ -243,7 +244,7 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
             # print("cost1: {}".format(cost1))
             mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-            outflow = self.k.vehicle.get_outflow_rate(600) 
+            outflow = self.k.vehicle.get_outflow_rate(OUTFLOW_RATE_SPAN) 
             if outflow == None:
                 outflow = 0.0
             
@@ -282,9 +283,9 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
         max_length = self.k.scenario.length()
         
         left_length = self.k.scenario.edge_length('left')
-        bottom_length = self.k.scenario.edge_length('bottom')
         left_car_ids = self.k.vehicle.get_ids_by_edge('left')
-        bottom_car_ids = self.k.vehicle.get_ids_by_edge('bottom')
+        bottom_car_ids = self.k.vehicle.get_ids_by_edge('bottom') + self.k.vehicle.get_ids_by_edge('inflow_merge')
+        bottom_length = self.k.scenario.edge_length('bottom') + self.k.scenario.edge_length('inflow_merge')
         left_density = np.sum(self.k.vehicle.get_length(left_car_ids)) / left_length
         bottom_density = np.sum(self.k.vehicle.get_length(bottom_car_ids)) / bottom_length
         

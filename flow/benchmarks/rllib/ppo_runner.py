@@ -106,9 +106,9 @@ if __name__ == "__main__":
     alg_run = "PPO"
 
     # tunning parameters
-    e2_list = [0.1]
+    e2_list = [0.1, 0.3]
     e3_list = [0.0, 0.1]
-    t_min = [1.0]
+    t_min = [5.0, 10.0]
     methods = ['buffered_obs']
     
     env_name_list = []
@@ -168,7 +168,7 @@ if __name__ == "__main__":
 
         # get the env name and a creator for the environment
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + 'bottom_[eta1, eta2, eta3]:[{}, {}, {}]'.format(1.0, e2, e3) + '_t_min:{}'.format(t)
+        env_name = env_name + '1000_[eta1, eta2, eta3]:[{}, {}, {}]'.format(1.0, e2, e3) + '_t_min:{}'.format(t)
         env_name_list.append(env_name)
         config_list.append(config)
         # Register as rllib env
@@ -185,7 +185,7 @@ if __name__ == "__main__":
             "checkpoint_freq": 25,
             "max_failures": 999,
             "stop": {
-                "training_iteration": 200
+                "training_iteration": 300
             },
             "num_samples": 1,
         }
