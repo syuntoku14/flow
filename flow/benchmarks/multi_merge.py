@@ -20,7 +20,7 @@ from flow.controllers import IDMController, RLController, SimCarFollowingControl
 # time horizon of a single rollout
 HORIZON = 1500
 SIM_STEP = 0.2  # same as 300 seconds
-WARMUP = 100
+WARMUP = 0
 # inflow rate at the highway
 FLOW_RATE = 1700
 FLOW_RATE_MERGE = 100

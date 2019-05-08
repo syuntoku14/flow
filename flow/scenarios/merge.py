@@ -12,7 +12,7 @@ ADDITIONAL_NET_PARAMS = {
     # length of the merge edge
     "merge_length": 100,
     # length of the highway leading to the merge
-    "pre_merge_length": 200,
+    "pre_merge_length": 100,
     # length of the highway past the merge
     "post_merge_length": 100,
     # number of lanes in the merge

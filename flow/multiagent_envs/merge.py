@@ -357,7 +357,7 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(8*self.buffer_length + 3, ), dtype=np.float32)
+        return Box(low=0, high=1, shape=(8*self.buffer_length, ), dtype=np.float32)
 
     def get_state(self, rl_id=None, **kwargs):
         obs = super().get_state(rl_id, **kwargs)
@@ -374,14 +374,14 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
         # update buffered_obs
         for key, value in obs.items():
             obs_len = len(value)
-            self.buffered_obs[key] = self.buffered_obs[key][obs_len:-3]
+            self.buffered_obs[key] = self.buffered_obs[key][obs_len:]#-3]
             self.buffered_obs[key] = np.hstack((self.buffered_obs[key], value))
-            traffic_info = np.array([self.flow_rate / 3600, self.flow_rate_merge / 3600, self.rl_penetration])
-            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], traffic_info))
+            #traffic_info = np.array([self.flow_rate / 3600, self.flow_rate_merge / 3600, self.rl_penetration])
+            #self.buffered_obs[key] = np.hstack((self.buffered_obs[key], traffic_info))
         
         return self.buffered_obs
 
-    def reset(self, random=True):
+    def reset(self, random=False):
         """See parent class.
 
         In addition, a few variables that are specific to this class are
