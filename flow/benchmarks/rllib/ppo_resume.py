@@ -46,7 +46,7 @@ parser.add_argument(
 parser.add_argument(
     '--num_rollouts',
     type=int,
-    default=60,
+    default=30,
     help="The number of rollouts to train over.")
 
 # optional input parameters
@@ -95,9 +95,10 @@ def on_episode_end(info):
 if __name__ == "__main__":
     args = parser.parse_args()
     # base environment to resume training
-    base = '/headless/ray_results/resume/' + \
-        'PPO_MultiWaveAttenuationMergePOEnvBufferedObs-v0_[FLOW_RATE, FLOW_RATE_MERGE, RL_PENETRATION]:[2097,146,0.127]_0_2019-04-28_23-23-18c2m88oa_'
-    checkpoint = 250
+    base = '/headless/ray_results/new_random_env/' + \
+        'PPO_MultiWaveAttenuationMergePOEnvBufferedObs-v0density_[eta1, eta2, eta3]:[1.0, 0.1, 0.1]_t_min:7.0_2_2019-05-09_11-22-353obt9rxf'
+
+    checkpoint = 200
     config_path = base + '/params.pkl'
     # benchmark name
     benchmark_name = args.benchmark_name
@@ -106,7 +107,7 @@ if __name__ == "__main__":
     # number of parallel workers
     num_cpus = args.num_cpus
     # initialize a ray instance
-    ray.init()
+    ray.init(num_cpus=num_cpus, include_webui=False, ignore_reinit_error=True)
     
     # training_iter
     training_iter = 1
@@ -116,41 +117,14 @@ if __name__ == "__main__":
         benchmark = __import__(
             "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
         flow_params = benchmark.buffered_obs_flow_params
+
+        flow_params["env"].additional_params["eta1"] = 1.0# e[0]
+        flow_params["env"].additional_params["eta2"] = 0.1 # e[1]
+        flow_params["env"].additional_params["eta3"] = 0.1 # e[2]
+        flow_params["env"].additional_params["t_min"] = 7.0
         
-        # inflow rate at the highway
-        FLOW_RATE = np.random.randint(1900, 2300)
-        FLOW_RATE_MERGE = np.random.randint(90, 150)
-        # percent of autonomous vehicles
-        RL_PENETRATION = 0.08 + np.random.rand() * 0.1
-
-        inflow = InFlows()
-        inflow.add(
-            veh_type="human",
-            edge="inflow_highway",
-            vehs_per_hour=int((1 - RL_PENETRATION) * FLOW_RATE),
-            #probability=FLOW_PROB,
-            departLane="free",
-            departSpeed=10)
-        inflow.add(
-            veh_type="rl",
-            edge="inflow_highway",
-            vehs_per_hour=int(RL_PENETRATION * FLOW_RATE),
-            #probability=FLOW_PROB_MERGE,
-            departLane="free",
-            departSpeed=10)
-        inflow.add(
-            veh_type="human",
-            edge="inflow_merge",
-            vehs_per_hour=FLOW_RATE_MERGE,
-            #probability=FLOW_PROB_RL,
-            departLane="free",
-            departSpeed=7.5)
-
-        # generate new flow_params
-        net = flow_params['net']
-        net.inflows = inflow
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + '_[FLOW_RATE, FLOW_RATE_MERGE, RL_PENETRATION]:[{},{},{:.3f}]'.format(FLOW_RATE, FLOW_RATE_MERGE, RL_PENETRATION)
+        env_name = env_name + 'shortermeasure01:01:7'
         # Register as rllib env
         register_env(env_name, create_env)
         
@@ -159,6 +133,11 @@ if __name__ == "__main__":
         
         with open(config_path, mode='rb') as f:
             config = pickle.load(f)
+
+        horizon = flow_params["env"].horizon
+        config["num_workers"] = min(num_cpus, num_rollouts)
+        config["train_batch_size"] = horizon * num_rollouts
+        config["sample_batch_size"] = 750
         exp_tag = {
             "run": 'PPO',
             "env": env_name,
@@ -169,7 +148,7 @@ if __name__ == "__main__":
             "checkpoint_at_end": True,
             "max_failures": 999,
             "stop": {
-                "training_iteration": checkpoint + 50
+                "training_iteration": checkpoint + 100
             },
             "restore": checkpoint_path,
             "num_samples": 1,

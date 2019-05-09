@@ -144,7 +144,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
             # print("cost1: {}".format(cost1))
             mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-            outflow = self.k.vehicle.get_outflow_rate(600)
+            outflow = self.k.vehicle.get_outflow_rate(100)
             
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
@@ -260,7 +260,7 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6, ), dtype=np.float32)
+        return Box(low=0, high=1, shape=(8, ), dtype=np.float32)
     
     def compute_reward(self, rl_actions, **kwargs):
         """See class definition."""
@@ -285,13 +285,18 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
             # print("cost1: {}".format(cost1))
             mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-            outflow = self.k.vehicle.get_outflow_rate(600) 
+            outflow = self.k.vehicle.get_outflow_rate(100) 
             if outflow == None:
                 outflow = 0.0
             
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
             for rl_id in self.k.vehicle.get_rl_ids():
+                current_edge = self.k.vehicle.get_edge(rl_id)
+                # don't control cars in inflow edge, 
+                if 'inflow' in current_edge:
+                    continue
+                    
                 cost2 = 0.0
                 lead_id = self.k.vehicle.get_leader(rl_id)
                 if lead_id not in ["", None] \
@@ -318,6 +323,11 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
         max_length = self.k.scenario.length()
         
         left_length = self.k.scenario.edge_length('left')
+        left_car_ids = self.k.vehicle.get_ids_by_edge('left')
+        bottom_car_ids = self.k.vehicle.get_ids_by_edge('bottom') + self.k.vehicle.get_ids_by_edge('inflow_merge')
+        bottom_length = self.k.scenario.edge_length('bottom') + self.k.scenario.edge_length('inflow_merge')
+        left_density = np.sum(self.k.vehicle.get_length(left_car_ids)) / left_length
+        bottom_density = np.sum(self.k.vehicle.get_length(bottom_car_ids)) / bottom_length
 
         obs = collections.OrderedDict()
         for rl_id in self.k.vehicle.get_rl_ids():
@@ -326,7 +336,12 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
             follower = self.k.vehicle.get_follower(rl_id)
             distance_to_merge = left_length
             current_edge = self.k.vehicle.get_edge(rl_id)
+
             
+            # don't control cars in inflow edge, 
+            if 'inflow' in current_edge:
+                continue
+                
             if lead_id in ["", None]:
                 # in case leader is not visible
                 lead_speed = max_speed
@@ -357,7 +372,9 @@ class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
             lead_head / max_length,
             (this_speed - follow_speed) / max_speed,
             follow_head / max_length,
-            distance_to_merge / left_length
+            distance_to_merge / left_length,
+            left_density,
+            bottom_density
             ], dtype='float32')
             obs.update({rl_id: observation})
         
@@ -370,7 +387,7 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
         super().__init__(env_params, sim_params, scenario, simulator)
         # historical observation
         self.buffered_obs = {}
-        self.buffer_length = 3
+        self.buffer_length = 5
         self.FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
         self.FLOW_RATE_MERGE = self.env_params.additional_params["FLOW_RATE_MERGE"] 
         self.RL_PENETRATION = self.env_params.additional_params["RL_PENETRATION"]
@@ -381,7 +398,7 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
+        return Box(low=0, high=1, shape=(8*self.buffer_length + 3, ), dtype=np.float32)
 
     def get_state(self, rl_id=None, **kwargs):
         obs = super().get_state(rl_id, **kwargs)
@@ -405,7 +422,7 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
         
         return self.buffered_obs
 
-    def reset(self):
+    def reset(self, random=False):
         """See parent class.
 
         In addition, a few variables that are specific to this class are
@@ -413,32 +430,33 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
         """
         self.buffered_obs = {}
         
-        # perturbe the traffic condition
-        self.flow_rate = self.FLOW_RATE * (0.85 + np.random.rand()*0.3)
-        self.flow_rate_merge = self.FLOW_RATE_MERGE * (0.85 + np.random.rand()*0.3)
-        self.rl_penetration = self.RL_PENETRATION * (0.9 + np.random.rand()*0.2)
-        
-        inflow = InFlows()
-        inflow.add(
-            veh_type="human",
-            edge="inflow_highway",
-            vehs_per_hour=int((1 - self.rl_penetration) * self.flow_rate),
-            #probability=FLOW_PROB,
-            departLane="free",
-            departSpeed=10)
-        inflow.add(
-            veh_type="rl",
-            edge="inflow_highway",
-            vehs_per_hour=int(self.rl_penetration * self.flow_rate),
-            #probability=FLOW_PROB_MERGE,
-            departLane="free",
-            departSpeed=10)
-        inflow.add(
-            veh_type="human",
-            edge="inflow_merge",
-            vehs_per_hour=self.flow_rate_merge,
-            #probability=FLOW_PROB_RL,
-            departLane="free",
-            departSpeed=7.5)
-        self.scenario.net_params.inflows = inflow
+        if random:
+            # perturbe the traffic condition
+            self.flow_rate = self.FLOW_RATE * (0.85 + np.random.rand()*0.3)
+            self.flow_rate_merge = self.FLOW_RATE_MERGE * (0.85 + np.random.rand()*0.3)
+            self.rl_penetration = self.RL_PENETRATION * (0.9 + np.random.rand()*0.2)
+
+            inflow = InFlows()
+            inflow.add(
+                veh_type="human",
+                edge="inflow_highway",
+                vehs_per_hour=int((1 - self.rl_penetration) * self.flow_rate),
+                #probability=FLOW_PROB,
+                departLane="free",
+                departSpeed=10)
+            inflow.add(
+                veh_type="rl",
+                edge="inflow_highway",
+                vehs_per_hour=int(self.rl_penetration * self.flow_rate),
+                #probability=FLOW_PROB_MERGE,
+                departLane="free",
+                departSpeed=10)
+            inflow.add(
+                veh_type="human",
+                edge="inflow_merge",
+                vehs_per_hour=self.flow_rate_merge,
+                #probability=FLOW_PROB_RL,
+                departLane="free",
+                departSpeed=7.5)
+            self.scenario.net_params.inflows = inflow
         return super().reset()
