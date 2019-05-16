@@ -28,16 +28,11 @@ ADDITIONAL_ENV_PARAMS = {
     "t_min": 1.0,
     # weigts of cost function
     "eta1": 1.0,
-    "eta2": 0.2,
-    "eta3": 0.1,
-    "reward_scale": 1.0,
-    "FLOW_RATE": 2000,
-    "FLOW_RATE_MERGE": 100,
-    "RL_PENETRATION": 0.1
+    "eta2": 0.2
 }
 
 
-class MultiWaveAttenuationMergePOEnv(MultiEnv):
+class MultiWaveAttenuationLoopMergePOEnv(MultiEnv):
 
     def __init__(self, env_params, sim_params, scenario, simulator='traci'):
         for p in ADDITIONAL_ENV_PARAMS.keys():
@@ -67,7 +62,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(5, ), dtype=np.float32)
+        return Box(low=0, high=1, shape=(6, ), dtype=np.float32)
 
     def _apply_rl_actions(self, rl_actions):
         """See class definition"""
@@ -76,6 +71,23 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             accel = list(rl_actions.values())
             
             self.k.vehicle.apply_acceleration(rl_ids, accel)
+
+    def get_distance_to_merge(self, id_):
+        def find_merge_index(route):
+            if 'center' in route:
+                return route.index('center')
+            else:
+                return route.index('top')
+
+        edge = self.k.vehicle.get_edge(id_)
+        pos = self.k.vehicle.get_position(id_)
+        route = self.k.vehicle.get_route(id_)
+        merge_index = [find_merge_index(r) for r in route]
+        merge_route = [r[:idx+1]for idx, r in zip(merge_index, route)]
+        merge_length = [[self.k.scenario.edge_length(e) for e in r] for r in merge_route]
+        distance = [sum(l) for l in merge_length]
+        distance = [d - p for d, p in zip(distance, pos)]
+        return distance
 
     def get_state(self, rl_id=None, **kwargs):
         """See class definition."""
@@ -118,6 +130,8 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             lead_head / max_length,
             (this_speed - follow_speed) / max_speed,
             follow_head / max_length,
+            self.get_distance_to_merge([rl_id])[0] / self.k.scenario.length() \
+                # distance to merge intersection
             ], dtype='float32')
             obs.update({rl_id: observation})
         
@@ -135,7 +149,6 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             rew = collections.OrderedDict()
             info = collections.OrderedDict()
             
-            scale = self.env_params.additional_params["reward_scale"]
             # weights for cost1, cost2, and cost3, respectively
             eta1 = self.env_params.additional_params["eta1"]
             eta2 = self.env_params.additional_params["eta2"]
@@ -144,7 +157,6 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
             # print("cost1: {}".format(cost1))
             mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-            outflow = self.k.vehicle.get_outflow_rate(600)
             
             # penalize small time headways
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
@@ -158,11 +170,11 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                         self.k.vehicle.get_speed(rl_id), 0)
                     cost2 += min((t_headway - t_min) / t_min, 0.0)
                     # print("cost2: {}".format(cost2))
-                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0) * scale})
-                info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
+                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2, 0.0)})
+                info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel}})
                 if kwargs["fail"]:
                     rew.update({rl_id: 0.0})
-                    info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
+                    info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel}})
                     
             return rew, info
 
@@ -209,135 +221,21 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         self.leader = []
         self.follower = []
         return super().reset()
-    
-
-class MultiWaveAttenuationMergePOEnvOutFlowRew(MultiWaveAttenuationMergePOEnv):
-
-    @property
-    def observation_space(self):
-        """See class definition."""
-        return Box(low=0, high=1, shape=(6, ), dtype=np.float32)
-    
-    def compute_reward(self, rl_actions, **kwargs):
-        """See class definition."""
-        if self.env_params.evaluate:
-            return np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-        else:
-            ## return a reward of 0 if a collision occurred
-            #if kwargs["fail"]:
-            #    return 0
-            
-            rew = collections.OrderedDict()
-            info = collections.OrderedDict()
-            
-            scale = self.env_params.additional_params["reward_scale"]
-            # weights for cost1, cost2, and cost3, respectively
-            eta1 = self.env_params.additional_params["eta1"]
-            eta2 = self.env_params.additional_params["eta2"]
-            eta3 = self.env_params.additional_params["eta3"]
-            FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
-            
-            # reward high system-level velocities
-            cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
-            # print("cost1: {}".format(cost1))
-            mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-            outflow = self.k.vehicle.get_outflow_rate(600) 
-            if outflow == None:
-                outflow = 0.0
-            
-            # penalize small time headways
-            t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
-            for rl_id in self.k.vehicle.get_rl_ids():
-                cost2 = 0.0
-                lead_id = self.k.vehicle.get_leader(rl_id)
-                if lead_id not in ["", None] \
-                        and self.k.vehicle.get_speed(rl_id) > 0:
-                    t_headway = max(
-                        self.k.vehicle.get_headway(rl_id) /
-                        self.k.vehicle.get_speed(rl_id), 0)
-                    cost2 += min((t_headway - t_min) / t_min, 0.0)
-                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2 + eta3 * outflow / FLOW_RATE, 0.0) * scale})
-                info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
-                if kwargs["fail"]:
-                    rew.update({rl_id: 0.0})
-                    info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
-                    
-            return rew, info
-        
-    def get_state(self, rl_id=None, **kwargs):
-        """See class definition."""
-        self.leader = []
-        self.follower = []
-
-        # normalizing constants
-        max_speed = self.k.scenario.max_speed()
-        max_length = self.k.scenario.length()
-        
-        left_length = self.k.scenario.edge_length('left')
-
-        obs = collections.OrderedDict()
-        for rl_id in self.k.vehicle.get_rl_ids():
-            this_speed = self.k.vehicle.get_speed(rl_id)
-            lead_id = self.k.vehicle.get_leader(rl_id)
-            follower = self.k.vehicle.get_follower(rl_id)
-            distance_to_merge = left_length
-            current_edge = self.k.vehicle.get_edge(rl_id)
-            
-            if lead_id in ["", None]:
-                # in case leader is not visible
-                lead_speed = max_speed
-                lead_head = max_length
-            else:
-                self.leader.append(lead_id)
-                lead_speed = self.k.vehicle.get_speed(lead_id)
-                lead_head = self.k.vehicle.get_x_by_id(lead_id) \
-                    - self.k.vehicle.get_x_by_id(rl_id) \
-                    - self.k.vehicle.get_length(rl_id)
-
-            if follower in ["", None]:
-                # in case follower is not visible
-                follow_speed = 0
-                follow_head = max_length
-            else:
-                self.follower.append(follower)
-                follow_speed = self.k.vehicle.get_speed(follower)
-                follow_head = self.k.vehicle.get_headway(follower)
-            
-            # distance to the intersection
-            if current_edge == 'left':
-                distance_to_merge -= self.k.vehicle.get_position(rl_id)
-                
-            observation = np.array([
-            this_speed / max_speed,
-            (lead_speed - this_speed) / max_speed,
-            lead_head / max_length,
-            (this_speed - follow_speed) / max_speed,
-            follow_head / max_length,
-            distance_to_merge / left_length
-            ], dtype='float32')
-            obs.update({rl_id: observation})
-        
-        return obs
 
     
-class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOutFlowRew):
+class MultiWaveAttenuationLoopMergePOEnvBufferedObs(MultiWaveAttenuationLoopMergePOEnv):
     # obs: 3xobs + traffic info
     def __init__(self, env_params, sim_params, scenario, simulator='traci'):       
         super().__init__(env_params, sim_params, scenario, simulator)
         # historical observation
         self.buffered_obs = {}
         self.buffer_length = 3
-        self.FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
-        self.FLOW_RATE_MERGE = self.env_params.additional_params["FLOW_RATE_MERGE"] 
-        self.RL_PENETRATION = self.env_params.additional_params["RL_PENETRATION"]
-        self.flow_rate = self.FLOW_RATE
-        self.flow_rate_merge = self.FLOW_RATE_MERGE
-        self.rl_penetration = self.RL_PENETRATION
         
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
+        super_size = super().observation_space.shape[0]
+        return Box(low=0, high=1, shape=(super_size*self.buffer_length, ), dtype=np.float32)
 
     def get_state(self, rl_id=None, **kwargs):
         obs = super().get_state(rl_id, **kwargs)
@@ -354,48 +252,16 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnvOu
         # update buffered_obs
         for key, value in obs.items():
             obs_len = len(value)
-            self.buffered_obs[key] = self.buffered_obs[key][obs_len:-3]
+            self.buffered_obs[key] = self.buffered_obs[key][obs_len:]
             self.buffered_obs[key] = np.hstack((self.buffered_obs[key], value))
-            traffic_info = np.array([self.flow_rate / 3600, self.flow_rate_merge / 3600, self.rl_penetration])
-            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], traffic_info))
-        
+
         return self.buffered_obs
 
-    def reset(self, random=False):
+    def reset(self):
         """See parent class.
 
         In addition, a few variables that are specific to this class are
         emptied before they are used by the new rollout.
         """
         self.buffered_obs = {}
-        
-        if random:
-            # perturbe the traffic condition
-            self.flow_rate = self.FLOW_RATE * (0.85 + np.random.rand()*0.3)
-            self.flow_rate_merge = self.FLOW_RATE_MERGE * (0.85 + np.random.rand()*0.3)
-            self.rl_penetration = self.RL_PENETRATION * (0.9 + np.random.rand()*0.2)
-
-            inflow = InFlows()
-            inflow.add(
-                veh_type="human",
-                edge="inflow_highway",
-                vehs_per_hour=int((1 - self.rl_penetration) * self.flow_rate),
-                #probability=FLOW_PROB,
-                departLane="free",
-                departSpeed=10)
-            inflow.add(
-                veh_type="rl",
-                edge="inflow_highway",
-                vehs_per_hour=int(self.rl_penetration * self.flow_rate),
-                #probability=FLOW_PROB_MERGE,
-                departLane="free",
-                departSpeed=10)
-            inflow.add(
-                veh_type="human",
-                edge="inflow_merge",
-                vehs_per_hour=self.flow_rate_merge,
-                #probability=FLOW_PROB_RL,
-                departLane="free",
-                departSpeed=7.5)
-            self.scenario.net_params.inflows = inflow
         return super().reset()
