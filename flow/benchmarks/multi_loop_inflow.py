@@ -25,7 +25,7 @@ from flow.multiagent_envs.merge import ADDITIONAL_ENV_PARAMS
 # time horizon of a single rollout
 HORIZON = 750
 SIM_STEP = 0.2  # same as 300 seconds
-WARMUP = 30
+WARMUP = 100
 # percent of autonomous vehicles
 VEHICLE_NUM = 25
 INFLOW_PROB = 0.1
@@ -121,5 +121,5 @@ flow_params = dict(
 
     # parameters specifying the positioning of vehicles upon initialization/
     # reset (see flow.core.params.InitialConfig)
-    initial=InitialConfig(shuffle=True),
+    initial=InitialConfig(shuffle=True, x0=50, spacing="uniform", additional_params={"merge_bunching": 0}),
 )

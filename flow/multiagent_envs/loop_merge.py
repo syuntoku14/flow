@@ -62,7 +62,7 @@ class MultiWaveAttenuationLoopMergePOEnv(MultiEnv):
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6, ), dtype=np.float32)
+        return Box(low=-1, high=1, shape=(8, ), dtype=np.float32)
 
     def _apply_rl_actions(self, rl_actions):
         """See class definition"""
@@ -72,22 +72,28 @@ class MultiWaveAttenuationLoopMergePOEnv(MultiEnv):
             
             self.k.vehicle.apply_acceleration(rl_ids, accel)
 
+
     def get_distance_to_merge(self, id_):
         def find_merge_index(route):
             if 'center' in route:
                 return route.index('center')
-            else:
+            elif 'top' in route:
                 return route.index('top')
+            else:
+                return None
 
         edge = self.k.vehicle.get_edge(id_)
         pos = self.k.vehicle.get_position(id_)
         route = self.k.vehicle.get_route(id_)
-        merge_index = [find_merge_index(r) for r in route]
-        merge_route = [r[:idx+1]for idx, r in zip(merge_index, route)]
-        merge_length = [[self.k.scenario.edge_length(e) for e in r] for r in merge_route]
-        distance = [sum(l) for l in merge_length]
-        distance = [d - p for d, p in zip(distance, pos)]
+        merge_index = find_merge_index(route)
+        if merge_index == None:
+            return 0
+        merge_route = route[:merge_index+1]
+        merge_length = [self.k.scenario.edge_length(e) for e in merge_route]
+        distance = sum(merge_length)
+        distance = distance - pos
         return distance
+
 
     def get_state(self, rl_id=None, **kwargs):
         """See class definition."""
@@ -97,12 +103,27 @@ class MultiWaveAttenuationLoopMergePOEnv(MultiEnv):
         # normalizing constants
         max_speed = self.k.scenario.max_speed()
         max_length = self.k.scenario.length()
+        
+        center_length = self.k.scenario.edge_length('center')
+        center_car_ids = self.k.vehicle.get_ids_by_edge('center')
+        top_car_ids = self.k.vehicle.get_ids_by_edge('top')
+        top_length = self.k.scenario.edge_length('top')
+        center_density = np.sum(self.k.vehicle.get_length(center_car_ids)) / center_length
+        top_density = np.sum(self.k.vehicle.get_length(top_car_ids)) / top_length
+
 
         obs = collections.OrderedDict()
         for rl_id in self.k.vehicle.get_rl_ids():
             this_speed = self.k.vehicle.get_speed(rl_id)
             lead_id = self.k.vehicle.get_leader(rl_id)
             follower = self.k.vehicle.get_follower(rl_id)
+            route = self.k.vehicle.get_route(rl_id)
+            if 'center' in route:
+                highway_density = center_density
+                merge_density = top_density
+            else:
+                highway_density = top_density
+                merge_density = center_density
 
             if lead_id in ["", None]:
                 # in case leader is not visible
@@ -130,8 +151,9 @@ class MultiWaveAttenuationLoopMergePOEnv(MultiEnv):
             lead_head / max_length,
             (this_speed - follow_speed) / max_speed,
             follow_head / max_length,
-            self.get_distance_to_merge([rl_id])[0] / self.k.scenario.length() \
-                # distance to merge intersection
+            self.get_distance_to_merge(rl_id) / self.k.scenario.length(),
+            highway_density,
+            merge_density
             ], dtype='float32')
             obs.update({rl_id: observation})
         
@@ -235,7 +257,7 @@ class MultiWaveAttenuationLoopMergePOEnvBufferedObs(MultiWaveAttenuationLoopMerg
     def observation_space(self):
         """See class definition."""
         super_size = super().observation_space.shape[0]
-        return Box(low=0, high=1, shape=(super_size*self.buffer_length, ), dtype=np.float32)
+        return Box(low=-1, high=1, shape=(super_size*self.buffer_length, ), dtype=np.float32)
 
     def get_state(self, rl_id=None, **kwargs):
         obs = super().get_state(rl_id, **kwargs)

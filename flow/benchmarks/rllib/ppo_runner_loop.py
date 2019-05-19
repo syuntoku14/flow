@@ -102,8 +102,8 @@ if __name__ == "__main__":
     alg_run = "PPO"
 
     # tunning parameters
-    e2_list = [0.1, 0.3]
-    t_min = [1.0, 5.0, 10.0]
+    e2_list = [0.1, 0.3, 0.5]
+    t_min = [1.0]
     
     env_name_list = []
     config_list = []
@@ -155,7 +155,7 @@ if __name__ == "__main__":
 
         # get the env name and a creator for the environment
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + '_[eta2]:[{}]'.format(e2) + '_t_min:{}'.format(t)
+        env_name = env_name + 'density' + '_[eta2]:[{}]'.format(e2) + '_t_min:{}'.format(t)
         env_name_list.append(env_name)
         config_list.append(config)
         # Register as rllib env
