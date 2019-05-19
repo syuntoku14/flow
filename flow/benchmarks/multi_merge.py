@@ -13,6 +13,7 @@ is 10%. This is multi-agent scenario
 from copy import deepcopy
 from flow.core.params import SumoParams, EnvParams, InitialConfig, NetParams, \
     InFlows, SumoCarFollowingParams
+from flow.multiagent_envs.merge import ADDITIONAL_ENV_PARAMS
 from flow.scenarios.merge import ADDITIONAL_NET_PARAMS
 from flow.core.params import VehicleParams
 from flow.controllers import IDMController, RLController, SimCarFollowingController
@@ -38,6 +39,8 @@ additional_net_params = deepcopy(ADDITIONAL_NET_PARAMS)
 additional_net_params["merge_lanes"] = 1
 additional_net_params["highway_lanes"] = 1
 additional_net_params["pre_merge_length"] = 600
+
+additional_env_params = deepcopy(ADDITIONAL_ENV_PARAMS)
 
 # RL vehicles constitute 5% of the total number of vehicles
 vehicles = VehicleParams()
@@ -106,19 +109,7 @@ flow_params = dict(
         horizon=HORIZON,
         sims_per_step=2,
         warmup_steps=WARMUP,
-        additional_params={
-            "max_accel": 3,
-            "max_decel": 3,
-            "target_velocity": 25,
-            "eta1": 1.0,
-            "eta2": 0.3,
-            "eta3": 0.5,
-            "reward_scale": 1.0,
-            "t_min": 1.0,
-            "FLOW_RATE": FLOW_RATE,
-            "FLOW_RATE_MERGE": FLOW_RATE_MERGE,
-            "RL_PENETRATION": RL_PENETRATION
-        },
+        additional_params=additional_env_params
     ),
 
     # network-related parameters (see flow.core.params.NetParams and the

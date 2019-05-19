@@ -149,6 +149,14 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             ], dtype='float32')
             obs.update({rl_id: observation})
         
+        # V2V communication to the leading car
+        lead_val = self.observation_space.high
+        lead_val[-1] = 0
+        for key, val in sorted(obs.items(), key=lambda item: item[1][-1]):
+            new_val = np.hstack((val, lead_val))
+            lead_val = val
+            obs[key] = new_val
+            
         return obs
 
     def compute_reward(self, rl_actions, **kwargs):
