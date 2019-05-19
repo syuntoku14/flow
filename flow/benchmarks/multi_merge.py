@@ -138,11 +138,5 @@ flow_params = dict(
     initial=InitialConfig(),
 )
 
-one_rew_flow_params = deepcopy(flow_params)
-one_rew_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvOneRew"
-
-outflow_rew_flow_params = deepcopy(flow_params)
-outflow_rew_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvOutFlowRew"
-
 buffered_obs_flow_params = deepcopy(flow_params)
 buffered_obs_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvBufferedObs"
