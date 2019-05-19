@@ -23,7 +23,7 @@ from flow.controllers import IDMController, RLController, \
 from flow.multiagent_envs.merge import ADDITIONAL_ENV_PARAMS
 
 # time horizon of a single rollout
-HORIZON = 750
+HORIZON = 1500
 SIM_STEP = 0.2  # same as 300 seconds
 WARMUP = 100
 # percent of autonomous vehicles
