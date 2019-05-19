@@ -55,6 +55,19 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
 
         super().__init__(env_params, sim_params, scenario, simulator)
 
+        
+    def get_distance_to_merge(self, id_):
+        edge = self.k.vehicle.get_edge(id_)
+        pos = self.k.vehicle.get_position(id_)
+        left_len = self.k.scenario.edge_length('left')
+        inflow_len = self.k.scenario.edge_length('inflow_highway')
+        if edge == 'left':
+            return left_len - pos
+        elif edge == 'inflow_highway':
+            return left_len + inflow_len - pos
+        else:
+            return 0
+
     @property
     def action_space(self):
         """See class definition."""
@@ -93,8 +106,6 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             this_speed = self.k.vehicle.get_speed(rl_id)
             lead_id = self.k.vehicle.get_leader(rl_id)
             follower = self.k.vehicle.get_follower(rl_id)
-            distance_to_merge = left_length
-            current_edge = self.k.vehicle.get_edge(rl_id)
             
             if lead_id in ["", None]:
                 # in case leader is not visible
@@ -116,17 +127,13 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                 follow_speed = self.k.vehicle.get_speed(follower)
                 follow_head = self.k.vehicle.get_headway(follower)
             
-            # distance to the intersection
-            if current_edge == 'left':
-                distance_to_merge -= self.k.vehicle.get_position(rl_id)
-                
             observation = np.array([
             this_speed / max_speed,
             (lead_speed - this_speed) / max_speed,
             lead_head / max_length,
             (this_speed - follow_speed) / max_speed,
             follow_head / max_length,
-            distance_to_merge / left_length
+            self.get_distance_to_merge(rl_id) / self.k.scenario.length(),
             ], dtype='float32')
             obs.update({rl_id: observation})
         
@@ -230,7 +237,7 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
         super().__init__(env_params, sim_params, scenario, simulator)
         # historical observation
         self.buffered_obs = {}
-        self.buffer_length = 3
+        self.buffer_length = 1
         self.FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
         self.FLOW_RATE_MERGE = self.env_params.additional_params["FLOW_RATE_MERGE"] 
         self.RL_PENETRATION = self.env_params.additional_params["RL_PENETRATION"]
