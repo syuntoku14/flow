@@ -30,10 +30,11 @@ ADDITIONAL_ENV_PARAMS = {
     "eta1": 1.0,
     "eta2": 0.2,
     "eta3": 0.1,
+    "buf_length": 1,
     "reward_scale": 1.0,
     "FLOW_RATE": 2000,
     "FLOW_RATE_MERGE": 100,
-    "RL_PENETRATION": 0.1
+    "RL_PENETRATION": 0.1,
 }
 
 
@@ -54,7 +55,13 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         self.follower = []
 
         super().__init__(env_params, sim_params, scenario, simulator)
-
+        self.buffer_length = self.env_params.additional_params["buf_length"]
+        self.FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
+        self.FLOW_RATE_MERGE = self.env_params.additional_params["FLOW_RATE_MERGE"] 
+        self.RL_PENETRATION = self.env_params.additional_params["RL_PENETRATION"]
+        self.flow_rate = self.FLOW_RATE
+        self.flow_rate_merge = self.FLOW_RATE_MERGE
+        self.rl_penetration = self.RL_PENETRATION
         
     def get_distance_to_merge(self, id_):
         edge = self.k.vehicle.get_edge(id_)
@@ -227,57 +234,6 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         """
         self.leader = []
         self.follower = []
-        return super().reset()
-        
-
-    
-class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
-    # obs: 3xobs + traffic info
-    def __init__(self, env_params, sim_params, scenario, simulator='traci'):       
-        super().__init__(env_params, sim_params, scenario, simulator)
-        # historical observation
-        self.buffered_obs = {}
-        self.buffer_length = 1
-        self.FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
-        self.FLOW_RATE_MERGE = self.env_params.additional_params["FLOW_RATE_MERGE"] 
-        self.RL_PENETRATION = self.env_params.additional_params["RL_PENETRATION"]
-        self.flow_rate = self.FLOW_RATE
-        self.flow_rate_merge = self.FLOW_RATE_MERGE
-        self.rl_penetration = self.RL_PENETRATION
-        
-    @property
-    def observation_space(self):
-        """See class definition."""
-        return Box(low=0, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
-
-    def get_state(self, rl_id=None, **kwargs):
-        obs = super().get_state(rl_id, **kwargs)
-        # add new car to buffered obs
-        for key in obs.keys():
-            if not key in self.buffered_obs:
-                self.buffered_obs[key] = np.zeros(self.observation_space.shape, 'float32')
-        # remvove exited car from buffered obs
-        keys = deepcopy(list(self.buffered_obs.keys()))
-        for key in keys:
-            if not key in obs:
-                self.buffered_obs.pop(key)
-                
-        # update buffered_obs
-        for key, value in obs.items():
-            obs_len = len(value)
-            self.buffered_obs[key] = self.buffered_obs[key][obs_len:-3]
-            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], value))
-            traffic_info = np.array([self.flow_rate / 3600, self.flow_rate_merge / 3600, self.rl_penetration])
-            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], traffic_info))
-        
-        return self.buffered_obs
-
-    def reset(self):
-        """See parent class.
-
-        In addition, a few variables that are specific to this class are
-        emptied before they are used by the new rollout.
-        """
         self.buffered_obs = {}
         
         # perturbe the traffic condition
@@ -309,3 +265,38 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
             departSpeed=7.5)
         self.scenario.net_params.inflows = inflow
         return super().reset()
+    
+
+class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
+    # obs: 3xobs + traffic info
+    def __init__(self, env_params, sim_params, scenario, simulator='traci'):       
+        super().__init__(env_params, sim_params, scenario, simulator)
+        # historical observation
+        self.buffered_obs = {}
+
+    @property
+    def observation_space(self):
+        """See class definition."""
+        return Box(low=0, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
+
+    def get_state(self, rl_id=None, **kwargs):
+        obs = super().get_state(rl_id, **kwargs)
+        # add new car to buffered obs
+        for key in obs.keys():
+            if not key in self.buffered_obs:
+                self.buffered_obs[key] = np.zeros(self.observation_space.shape, 'float32')
+        # remvove exited car from buffered obs
+        keys = deepcopy(list(self.buffered_obs.keys()))
+        for key in keys:
+            if not key in obs:
+                self.buffered_obs.pop(key)
+                
+        # update buffered_obs
+        for key, value in obs.items():
+            obs_len = len(value)
+            self.buffered_obs[key] = self.buffered_obs[key][obs_len:-3]
+            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], value))
+            traffic_info = np.array([self.flow_rate / 3600, self.flow_rate_merge / 3600, self.rl_penetration])
+            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], traffic_info))
+        
+        return self.buffered_obs
