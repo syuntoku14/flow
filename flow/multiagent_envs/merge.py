@@ -113,7 +113,12 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             this_speed = self.k.vehicle.get_speed(rl_id)
             lead_id = self.k.vehicle.get_leader(rl_id)
             follower = self.k.vehicle.get_follower(rl_id)
+            current_edge = self.k.vehicle.get_edge(rl_id)
             
+            # don't control cars in inflow edge
+            # if 'inflow' in current_edge:
+            #     continue
+
             if lead_id in ["", None]:
                 # in case leader is not visible
                 lead_speed = max_speed
@@ -177,6 +182,11 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
             for rl_id in self.k.vehicle.get_rl_ids():
                 cost2 = 0.0
+                current_edge = self.k.vehicle.get_edge(rl_id)
+                # don't control cars in inflow edge, 
+                # if 'inflow' in current_edge:
+                #     continue
+
                 lead_id = self.k.vehicle.get_leader(rl_id)
                 if lead_id not in ["", None] \
                         and self.k.vehicle.get_speed(rl_id) > 0:
