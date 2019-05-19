@@ -13,11 +13,12 @@ from flow.scenarios.highway import HighwayScenario
 from flow.scenarios.loop import LoopScenario
 from flow.scenarios.merge import MergeScenario
 from flow.scenarios.loop_merge import TwoLoopsOneMergingScenario
+from flow.scenarios.loop_inflow import LoopInflowScenario
 from flow.scenarios.multi_loop import MultiLoopScenario
 
 __all__ = [
     "Scenario", "BayBridgeScenario", "BayBridgeTollScenario",
     "BottleneckScenario", "Figure8Scenario", "SimpleGridScenario",
     "HighwayScenario", "LoopScenario", "MergeScenario",
-    "TwoLoopsOneMergingScenario", "MultiLoopScenario"
+    "TwoLoopsOneMergingScenario", "MultiLoopScenario", "LoopInflowScenario"
 ]
