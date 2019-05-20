@@ -87,7 +87,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6, ), dtype=np.float32)
+        return Box(low=0, high=1, shape=(6 * 2, ), dtype=np.float32)
 
     def _apply_rl_actions(self, rl_actions):
         """See class definition"""
@@ -150,7 +150,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             obs.update({rl_id: observation})
         
         # V2V communication to the leading car
-        lead_val = self.observation_space.high
+        lead_val = self.observation_space.high[:6]
         lead_val[-1] = 0
         for key, val in sorted(obs.items(), key=lambda item: item[1][-1]):
             new_val = np.hstack((val, lead_val))
