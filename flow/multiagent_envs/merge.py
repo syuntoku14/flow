@@ -244,7 +244,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         for veh_id in self.leader + self.follower:
             self.k.vehicle.set_observed(veh_id)
 
-    def reset(self):
+    def reset(self, random=True):
         """See parent class.
 
         In addition, a few variables that are specific to this class are
@@ -254,34 +254,35 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         self.follower = []
         self.buffered_obs = {}
         
-        # perturbe the traffic condition
-        self.flow_rate = self.FLOW_RATE * (0.85 + np.random.rand()*0.3)
-        self.flow_rate_merge = self.FLOW_RATE_MERGE * (0.85 + np.random.rand()*0.3)
-        self.rl_penetration = self.RL_PENETRATION * (0.9 + np.random.rand()*0.2)
-        
-        inflow = InFlows()
-        inflow.add(
-            veh_type="human",
-            edge="inflow_highway",
-            vehs_per_hour=int((1 - self.rl_penetration) * self.flow_rate),
-            #probability=FLOW_PROB,
-            departLane="free",
-            departSpeed=10)
-        inflow.add(
-            veh_type="rl",
-            edge="inflow_highway",
-            vehs_per_hour=int(self.rl_penetration * self.flow_rate),
-            #probability=FLOW_PROB_MERGE,
-            departLane="free",
-            departSpeed=10)
-        inflow.add(
-            veh_type="human",
-            edge="inflow_merge",
-            vehs_per_hour=self.flow_rate_merge,
-            #probability=FLOW_PROB_RL,
-            departLane="free",
-            departSpeed=7.5)
-        self.scenario.net_params.inflows = inflow
+        if random:
+            # perturbe the traffic condition
+            self.flow_rate = self.FLOW_RATE * (0.85 + np.random.rand()*0.3)
+            self.flow_rate_merge = self.FLOW_RATE_MERGE * (0.85 + np.random.rand()*0.3)
+            self.rl_penetration = self.RL_PENETRATION * (0.9 + np.random.rand()*0.2)
+
+            inflow = InFlows()
+            inflow.add(
+                veh_type="human",
+                edge="inflow_highway",
+                vehs_per_hour=int((1 - self.rl_penetration) * self.flow_rate),
+                #probability=FLOW_PROB,
+                departLane="free",
+                departSpeed=10)
+            inflow.add(
+                veh_type="rl",
+                edge="inflow_highway",
+                vehs_per_hour=int(self.rl_penetration * self.flow_rate),
+                #probability=FLOW_PROB_MERGE,
+                departLane="free",
+                departSpeed=10)
+            inflow.add(
+                veh_type="human",
+                edge="inflow_merge",
+                vehs_per_hour=self.flow_rate_merge,
+                #probability=FLOW_PROB_RL,
+                departLane="free",
+                departSpeed=7.5)
+            self.scenario.net_params.inflows = inflow
         return super().reset()
     
 
