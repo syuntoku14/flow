@@ -182,7 +182,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
             # print("cost1: {}".format(cost1))
             mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
-            outflow = self.k.vehicle.get_outflow_rate(600) 
+            outflow = self.k.vehicle.get_outflow_rate(100) 
             if outflow == None:
                 outflow = 0.0
             
@@ -244,7 +244,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         for veh_id in self.leader + self.follower:
             self.k.vehicle.set_observed(veh_id)
 
-    def reset(self, random=True):
+    def reset(self, random=False):
         """See parent class.
 
         In addition, a few variables that are specific to this class are

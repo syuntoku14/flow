@@ -19,7 +19,7 @@ from flow.core.params import VehicleParams
 from flow.controllers import IDMController, RLController, SimCarFollowingController
 
 # time horizon of a single rollout
-HORIZON = 1500
+HORIZON = 750
 SIM_STEP = 0.2  # same as 300 seconds
 WARMUP = 100
 # inflow rate at the highway
