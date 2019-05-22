@@ -16,7 +16,11 @@ import collections
 
 class MultiEnv(MultiAgentEnv, Env):
     """Multi-agent version of base env. See parent class for info"""
- 
+
+    def __init__(self, env_params, sim_params, scenario, simulator='traci'):
+        super().__init__(env_params, sim_params, scenario, simulator='traci')
+        self.prev_agents = []
+        
     def step(self, rl_actions):
         """Advance the environment by one step.
 
@@ -108,7 +112,7 @@ class MultiEnv(MultiAgentEnv, Env):
         done = collections.OrderedDict()
         info = collections.OrderedDict()
 
-        for key in states.keys():
+        for key in states.keys():  # TODO: remove(it doesn't update arrived cars)
             done.update({key: key in self.k.vehicle.get_arrived_ids()})
 
         if crash or (self.time_counter >= self.env_params.warmup_steps + self.env_params.horizon):
@@ -121,6 +125,15 @@ class MultiEnv(MultiAgentEnv, Env):
         clipped_actions = self.clip_actions(rl_actions)
         reward, info = self.compute_reward(clipped_actions, fail=crash)
 
+        # modify lost done, states, reward
+        current_agents = list(states.keys())
+        for key in self.prev_agents:
+            if not key in list(states.keys()):
+                done.update({key: True})
+                states.update({key:self.observation_space.low})
+                reward.update({key:0.0})
+        self.prev_agents = current_agents
+        
         return states, reward, done, info
 
     def reset(self, new_inflow_rate=None):

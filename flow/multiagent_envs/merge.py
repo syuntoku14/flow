@@ -87,7 +87,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6 * 2, ), dtype=np.float32)
+        return Box(low=-1, high=1, shape=(6 * 2, ), dtype=np.float32)
 
     def _apply_rl_actions(self, rl_actions):
         """See class definition"""
@@ -296,7 +296,7 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=0, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
+        return Box(low=-1, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
 
     def get_state(self, rl_id=None, **kwargs):
         obs = super().get_state(rl_id, **kwargs)
