@@ -108,7 +108,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         
         left_length = self.k.scenario.edge_length('left')
 
-        obs = collections.OrderedDict()
+        obs = {}
         for rl_id in self.k.vehicle.get_rl_ids():
             this_speed = self.k.vehicle.get_speed(rl_id)
             lead_id = self.k.vehicle.get_leader(rl_id)
@@ -168,8 +168,8 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             #if kwargs["fail"]:
             #    return 0
             
-            rew = collections.OrderedDict()
-            info = collections.OrderedDict()
+            rew = {}
+            info = {}
             
             scale = self.env_params.additional_params["reward_scale"]
             # weights for cost1, cost2, and cost3, respectively
@@ -202,7 +202,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
                         self.k.vehicle.get_headway(rl_id) /
                         self.k.vehicle.get_speed(rl_id), 0)
                     cost2 += min((t_headway - t_min) / t_min, 0.0)
-                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2 + eta3 * outflow / FLOW_RATE, 0.0) * scale})
+                rew.update({rl_id: max(eta1 * cost1 + eta2 * cost2 + eta3 * outflow / FLOW_RATE, 0.0) * scale - 1.0})
                 info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
                 if kwargs["fail"]:
                     rew.update({rl_id: 0.0})

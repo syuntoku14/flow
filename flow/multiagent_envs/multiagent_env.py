@@ -13,13 +13,16 @@ from flow.envs.base_env import Env
 from flow.utils.exceptions import FatalFlowError
 
 import collections
+from copy import deepcopy
 
 class MultiEnv(MultiAgentEnv, Env):
     """Multi-agent version of base env. See parent class for info"""
 
     def __init__(self, env_params, sim_params, scenario, simulator='traci'):
         super().__init__(env_params, sim_params, scenario, simulator='traci')
-        self.prev_agents = []
+        self.prev_states = {}
+        self.prev_reward = {}
+        self.prev_info = {}
         
     def step(self, rl_actions):
         """Advance the environment by one step.
@@ -109,16 +112,13 @@ class MultiEnv(MultiAgentEnv, Env):
                 break
 
         states = self.get_state()
-        done = collections.OrderedDict()
-        info = collections.OrderedDict()
+        done = {}
 
         for key in states.keys():  # TODO: remove(it doesn't update arrived cars)
             done.update({key: key in self.k.vehicle.get_arrived_ids()})
 
         if crash or (self.time_counter >= self.env_params.warmup_steps + self.env_params.horizon):
             done['__all__'] = True
-            for key in done:
-                done[key] = True
         else:
             done['__all__'] = False
 
@@ -126,13 +126,17 @@ class MultiEnv(MultiAgentEnv, Env):
         reward, info = self.compute_reward(clipped_actions, fail=crash)
 
         # modify lost done, states, reward
-        current_agents = list(states.keys())
-        for key in self.prev_agents:
-            if not key in list(states.keys()):
+        current_states, current_reward, current_info \
+            = deepcopy(states), deepcopy(reward), deepcopy(info)
+        for key in self.prev_states.keys():
+            if not key in states.keys():
                 done.update({key: True})
-                states.update({key:self.observation_space.low})
-                reward.update({key:0.0})
-        self.prev_agents = current_agents
+                states.update({key:self.prev_states[key]})
+                reward.update({key:self.prev_reward[key]})
+                info.update({key: self.prev_info[key]})
+        self.prev_states = current_states
+        self.prev_reward = current_reward
+        self.prev_info = current_info
         
         return states, reward, done, info
 
@@ -152,6 +156,11 @@ class MultiEnv(MultiAgentEnv, Env):
             the initial observation of the space. The initial reward is assumed
             to be zero.
         """
+        # reset the previous data
+        self.prev_states = {}
+        self.prev_reward = {}
+        self.prev_info = {}
+        
         # reset the time counter
         self.time_counter = 0
 
