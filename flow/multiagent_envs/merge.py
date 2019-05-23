@@ -55,7 +55,6 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         self.follower = []
 
         super().__init__(env_params, sim_params, scenario, simulator)
-        self.buffer_length = self.env_params.additional_params["buf_length"]
         self.FLOW_RATE = self.env_params.additional_params["FLOW_RATE"]
         self.FLOW_RATE_MERGE = self.env_params.additional_params["FLOW_RATE_MERGE"] 
         self.RL_PENETRATION = self.env_params.additional_params["RL_PENETRATION"]
@@ -291,7 +290,8 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
         super().__init__(env_params, sim_params, scenario, simulator)
         # historical observation
         self.buffered_obs = {}
-
+        self.buffer_length = self.env_params.additional_params["buf_length"]
+        
     @property
     def observation_space(self):
         """See class definition."""
