@@ -252,8 +252,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
         """
         self.leader = []
         self.follower = []
-        self.buffered_obs = {}
-        
+
         if random:
             # perturbe the traffic condition
             self.flow_rate = self.FLOW_RATE * (0.85 + np.random.rand()*0.3)
@@ -296,7 +295,7 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
     @property
     def observation_space(self):
         """See class definition."""
-        return Box(low=-1, high=1, shape=(6*self.buffer_length + 3, ), dtype=np.float32)
+        return Box(low=-1, high=1, shape=(12*self.buffer_length, ), dtype=np.float32)
 
     def get_state(self, rl_id=None, **kwargs):
         obs = super().get_state(rl_id, **kwargs)
@@ -313,9 +312,11 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
         # update buffered_obs
         for key, value in obs.items():
             obs_len = len(value)
-            self.buffered_obs[key] = self.buffered_obs[key][obs_len:-3]
+            self.buffered_obs[key] = self.buffered_obs[key][obs_len:]
             self.buffered_obs[key] = np.hstack((self.buffered_obs[key], value))
-            traffic_info = np.array([self.flow_rate / 3600, self.flow_rate_merge / 3600, self.rl_penetration])
-            self.buffered_obs[key] = np.hstack((self.buffered_obs[key], traffic_info))
         
         return self.buffered_obs
+    
+    def reset(self, random=False):
+        self.buffered_obs = {}
+        return super().reset(random)
