@@ -158,7 +158,7 @@ class MultiWaveAttenuationMergePOEnv(MultiEnv):
             
         return obs
 
-    def compute_reward(self, rl_actions, **kwargs):
+    def compute_reward(self, rl_actions=None, rl_states=None, **kwargs):
         """See class definition."""
         if self.env_params.evaluate:
             return np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
@@ -320,3 +320,63 @@ class MultiWaveAttenuationMergePOEnvBufferedObs(MultiWaveAttenuationMergePOEnv):
     def reset(self, random=False):
         self.buffered_obs = {}
         return super().reset(random)
+    
+    
+class MultiWaveAttenuationMergePOEnvCustomRew(MultiWaveAttenuationMergePOEnv):
+    def __init__(self, env_params, sim_params, scenario, simulator='traci'):       
+        super().__init__(env_params, sim_params, scenario, simulator)
+        self.theta = None
+        
+    def set_theta(self, theta):
+        self.theta = theta
+        
+    def get_theta(self):
+        return self.theta
+        
+    def calculate_feature(self, state):
+        return state
+    
+    def calculate_reward(self, feature):
+        return feature.dot(self.theta.T)
+
+    def compute_reward(self, rl_actions=None, rl_states= None, **kwargs):
+        """See class definition."""
+        if self.env_params.evaluate:
+            return np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
+        else:
+            rew = {}
+            info = {}
+            cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
+            mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
+            outflow = self.k.vehicle.get_outflow_rate(100) 
+            if outflow == None:
+                outflow = 0.0
+            
+            # penalize small time headways
+            t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
+            for rl_id in self.k.vehicle.get_rl_ids():
+                state = rl_states[rl_id]
+                feature = self.calculate_feature(state)
+                reward = self.calculate_reward(feature)
+                
+                # add the other information
+                cost2 = 0.0
+                current_edge = self.k.vehicle.get_edge(rl_id)
+                lead_id = self.k.vehicle.get_leader(rl_id)
+                if lead_id not in ["", None] \
+                        and self.k.vehicle.get_speed(rl_id) > 0:
+                    t_headway = max(
+                        self.k.vehicle.get_headway(rl_id) /
+                        self.k.vehicle.get_speed(rl_id), 0)
+                    cost2 += min((t_headway - t_min) / t_min, 0.0)
+                
+                info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
+                
+                # update reward
+                rew.update({rl_id: reward})
+                
+                if kwargs["fail"]:
+                    rew.update({rl_id: 0.0})
+                    info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
+                    
+            return rew, info

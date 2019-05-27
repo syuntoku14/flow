@@ -123,7 +123,7 @@ class MultiEnv(MultiAgentEnv, Env):
             done['__all__'] = False
 
         clipped_actions = self.clip_actions(rl_actions)
-        reward, info = self.compute_reward(clipped_actions, fail=crash)
+        reward, info = self.compute_reward(rl_actions=clipped_actions, rl_states=states, fail=crash)
 
         # modify lost done, states, reward
         current_states, current_reward, current_info \

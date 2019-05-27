@@ -131,3 +131,6 @@ flow_params = dict(
 
 buffered_obs_flow_params = deepcopy(flow_params)
 buffered_obs_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvBufferedObs"
+
+custom_rew_flow_params = deepcopy(flow_params)
+custom_rew_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvCustomRew"
