@@ -16,6 +16,12 @@ from gym.spaces.box import Box
 import numpy as np
 import collections
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.distributions import Normal
+
+
 ADDITIONAL_ENV_PARAMS = {
     # maximum acceleration for autonomous vehicles, in m/s^2
     "max_accel": 3,
@@ -380,3 +386,87 @@ class MultiWaveAttenuationMergePOEnvCustomRew(MultiWaveAttenuationMergePOEnv):
                     info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
                     
             return rew, info
+        
+        
+class Discriminator(nn.Module):
+    def __init__(self, num_inputs, hidden_size):
+        super(Discriminator, self).__init__()
+        
+        self.linear1   = nn.Linear(num_inputs, hidden_size)
+        self.linear2   = nn.Linear(hidden_size, hidden_size)
+        self.linear3   = nn.Linear(hidden_size, 1)
+        self.linear3.weight.data.mul_(0.1)
+        self.linear3.bias.data.mul_(0.0)
+    
+    def forward(self, x):
+        x = torch.tanh(self.linear1(x))
+        x = torch.tanh(self.linear2(x))
+        prob = torch.sigmoid(self.linear3(x))
+        return prob
+    
+        
+class MultiWaveAttenuationMergePOEnvGAIL(MultiWaveAttenuationMergePOEnv):
+    def __init__(self, env_params, sim_params, scenario, simulator='traci'):       
+        super().__init__(env_params, sim_params, scenario, simulator)
+        self.discriminator = None
+        
+    def init_discriminator(self, hidden_size):
+        num_inputs  = self.observation_space.shape[0]
+        num_outputs = self.action_space.shape[0]
+        self.discriminator = Discriminator(num_inputs + num_outputs, hidden_size)
+        
+    def set_state_dict(self, state_dict):
+        self.discriminator.load_state_dict(state_dict)
+        
+    def get_state_dict(self):
+        return self.discriminator.state_dict()
+
+    def calculate_reward(self, state, action):
+        state_action = torch.FloatTensor(np.hstack([state, action])).cpu()
+        return -np.log(self.discriminator(state_action).cpu().data.numpy())[0]
+
+    def compute_reward(self, rl_actions=None, rl_states=None, **kwargs):
+        """See class definition."""
+        
+        if rl_actions == None or rl_actions == {}:
+            return {}, {}
+        
+        rew = {}
+        info = {}
+        cost1 = rewards.desired_velocity(self, fail=kwargs["fail"])
+        mean_vel = np.mean(self.k.vehicle.get_speed(self.k.vehicle.get_ids()))
+        outflow = self.k.vehicle.get_outflow_rate(100) 
+        if outflow == None:
+            outflow = 0.0
+
+        # penalize small time headways
+        t_min = self.env_params.additional_params["t_min"]  # smallest acceptable time headway
+
+        for rl_id in self.k.vehicle.get_rl_ids():
+            if rl_id in rl_actions:
+                state = rl_states[rl_id]
+                action = rl_actions[rl_id]
+                reward = self.calculate_reward(state, action)
+            else:
+                reward = 0.0
+            # add the other information
+            cost2 = 0.0
+            current_edge = self.k.vehicle.get_edge(rl_id)
+            lead_id = self.k.vehicle.get_leader(rl_id)
+            if lead_id not in ["", None] \
+                    and self.k.vehicle.get_speed(rl_id) > 0:
+                t_headway = max(
+                    self.k.vehicle.get_headway(rl_id) /
+                    self.k.vehicle.get_speed(rl_id), 0)
+                cost2 += min((t_headway - t_min) / t_min, 0.0)
+
+            info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
+
+            # update reward
+            rew.update({rl_id: reward})
+
+            if kwargs["fail"]:
+                rew.update({rl_id: 0.0})
+                info.update({rl_id: {'cost1': cost1, 'cost2': cost2, 'mean_vel': mean_vel, "outflow": outflow}})
+
+        return rew, info

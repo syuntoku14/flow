@@ -134,3 +134,6 @@ buffered_obs_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvBufferedOb
 
 custom_rew_flow_params = deepcopy(flow_params)
 custom_rew_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvCustomRew"
+
+gail_flow_params = deepcopy(flow_params)
+gail_flow_params["env_name"] = "MultiWaveAttenuationMergePOEnvGAIL"
