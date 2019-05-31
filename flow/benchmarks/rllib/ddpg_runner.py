@@ -93,7 +93,7 @@ if __name__ == "__main__":
     # Import the benchmark and fetch its flow_params
     benchmark = __import__(
         "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
-    flow_params = benchmark.outflow_rew_flow_params
+    flow_params = benchmark.flow_params
 
     # initialize a ray instance
     ray.init()
@@ -107,7 +107,8 @@ if __name__ == "__main__":
     # use almost defalt config
     config = agent_cls._default_config.copy()
     config["num_workers"] = num_cpus
-    config["train_batch_size"] = horizon 
+    config["train_batch_size"] = 3000 
+    config["sample_batch_size"] = 750 
     config["horizon"] = horizon
     config['timesteps_per_iteration'] = int(horizon / sim_step)
     config['clip_actions'] = False  # FIXME(ev) temporary ray bug
@@ -125,22 +126,19 @@ if __name__ == "__main__":
     config['callbacks']['on_episode_end'] = ray.tune.function(on_episode_end)
     
     # tunning parameters
-    e2_list = [0.1, 0.5, 1.0, 5.0]
-    e3_list = [0.0, 0.1]
-    t_min = [5.0, 10.0]
+    e2_list = [0.1, 0.3]
+    e3_list = [0.0]
+    t_min = [10.0]
         
     env_name_list = []
     i = 0
     for e2, e3, t in product(e2_list, e3_list, t_min):
-        i += 1
-        if i == 1 or i == 2:
-            continue
-
         flow_params["env"].additional_params["eta1"] = 1.0# e[0]
         flow_params["env"].additional_params["eta2"] = e2 # e[1]
         flow_params["env"].additional_params["eta3"] = e3 # e[2]
         # flow_params["env"].additional_params["reward_scale"] = rew
         flow_params["env"].additional_params["t_min"] = t
+        flow_params["env"].additional_params["buf_length"] = 1
 
         # get the env name and a creator for the environment
         create_env, env_name = make_create_env(params=flow_params, version=0)

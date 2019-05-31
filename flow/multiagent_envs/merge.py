@@ -34,8 +34,8 @@ ADDITIONAL_ENV_PARAMS = {
     "t_min": 1.0,
     # weigts of cost function
     "eta1": 1.0,
-    "eta2": 0.2,
-    "eta3": 0.1,
+    "eta2": 0.1,
+    "eta3": 0,
     "buf_length": 1,
     "reward_scale": 1.0,
     "FLOW_RATE": 2000,

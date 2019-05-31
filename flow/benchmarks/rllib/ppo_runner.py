@@ -7,6 +7,7 @@ Proximal Policy Optimization Algorithms by Schulman et. al.
 import json
 import argparse
 from itertools import product
+from copy import deepcopy
 import numpy as np
 
 import ray
@@ -16,6 +17,9 @@ except ImportError:
     from ray.rllib.agents.registry import get_agent_class
 from ray.tune import Experiment, run_experiments
 from ray.tune.registry import register_env
+from ray.rllib.agents.ppo.ppo_policy_graph import PPOPolicyGraph
+from ray import tune
+from ray.rllib.evaluation.sample_batch import DEFAULT_POLICY_ID
 
 from flow.utils.registry import make_create_env
 from flow.utils.rllib import FlowParamsEncoder
@@ -85,7 +89,7 @@ def on_episode_end(info):
     cost1 = np.sum(episode.user_data["cost1"])
     cost2 = np.sum(episode.user_data["cost2"])
     mean_vel = np.mean(episode.user_data["mean_vel"])
-    outflow = np.mean(episode.user_data["outflow"][-500:])  # 1/3 of the whole steps
+    outflow = np.mean(episode.user_data["outflow"][-100:])  
     episode.custom_metrics["cost1"] = cost1
     episode.custom_metrics["cost2"] = cost2
     episode.custom_metrics["system_level_velocity"] = mean_vel
@@ -101,43 +105,36 @@ if __name__ == "__main__":
     # number of parallel workers
     num_cpus = args.num_cpus
     # initialize a ray instance
-    ray.init()
+    ray.init(num_cpus=63, logging_level=50, ignore_reinit_error=True)
     
     alg_run = "PPO"
 
     # tunning parameters
-    e2_list = [0.1, 0.3]
-    e3_list = [0.1, 0.3]
+    e2_list = [0.1]
+    e3_list = [0.0]
     t_min = [10.0]
-    methods = ['buffered_obs']
+    buf_len = [1]
     
     env_name_list = []
     config_list = []
     i = 0
-    for e2, e3, t, method in product(e2_list, e3_list, t_min, methods):
-        # i += 1
-        # if i == 1:
-        #     continue
-        
+
+    for e2, e3, t, b in product(e2_list, e3_list, t_min, buf_len):
+
         # Import the benchmark and fetch its flow_params
         benchmark = __import__(
             "flow.benchmarks.%s" % benchmark_name, fromlist=["flow_params"])
         
-        flow_params = benchmark.flow_params    
-        if method == "merge_distance":
-            flow_params = benchmark.outflow_rew_flow_params
-        elif method == "buffered_obs":
-            flow_params = benchmark.buffered_obs_flow_params
+        flow_params = deepcopy(benchmark.flow_params)
             
-        # get the env name and a creator for the environment
-        create_env, env_name = make_create_env(params=flow_params, version=0)
-        
         # create config
         horizon = flow_params["env"].horizon
         agent_cls = get_agent_class(alg_run)
-        config = agent_cls._default_config.copy()
+
+        config = deepcopy(agent_cls._default_config)
         config["num_workers"] = min(num_cpus, num_rollouts)
         config["train_batch_size"] = horizon * num_rollouts
+        config["sample_batch_size"] = 750
         config["use_gae"] = True
         config["horizon"] = horizon
         gae_lambda = 0.97
@@ -148,13 +145,9 @@ if __name__ == "__main__":
         config["num_sgd_iter"] = 10
         config['clip_actions'] = False  # FIXME(ev) temporary ray bug
         config["model"]["fcnet_hiddens"] = [128, 64, 32]
-        config["observation_filter"] = "MeanStdFilter"
+        config["observation_filter"] = "NoFilter"
         config["entropy_coeff"] = 0.0
 
-        # save the flow params for replay
-        flow_json = json.dumps(
-            flow_params, cls=FlowParamsEncoder, sort_keys=True, indent=4)
-        config['env_config']['flow_params'] = flow_json
         config['env_config']['run'] = alg_run
 
         config['callbacks']['on_episode_start'] = ray.tune.function(on_episode_start)
@@ -166,10 +159,28 @@ if __name__ == "__main__":
         flow_params["env"].additional_params["eta3"] = e3 # e[2]
         # flow_params["env"].additional_params["reward_scale"] = rew
         flow_params["env"].additional_params["t_min"] = t
+        flow_params["env"].additional_params["buf_length"] = b
+        # save the flow params for replay
+        flow_json = json.dumps(
+            flow_params, cls=FlowParamsEncoder, sort_keys=True, indent=4)
+ 
+        config['env_config']['flow_params'] = flow_json
 
         # get the env name and a creator for the environment
         create_env, env_name = make_create_env(params=flow_params, version=0)
-        env_name = env_name + '_[eta1, eta2, eta3]:[{}, {}, {}]'.format(1.0, e2, e3) + '_t_min:{}'.format(t)
+        env_name = 'eta2:{}_eta3:{}_tmin:{}_buflen:{}'.format(e2, e3, t, b)
+
+        env = create_env()
+        POLICY_ID = DEFAULT_POLICY_ID
+        default_policy = (PPOPolicyGraph, env.observation_space, env.action_space, {})
+        policy_graph = {POLICY_ID: default_policy}
+
+        config["multiagent"] = {
+            'policy_graphs': policy_graph,
+            'policy_mapping_fn': tune.function(lambda agent_id: POLICY_ID),
+            'policies_to_train': [POLICY_ID]
+        }
+
         env_name_list.append(env_name)
         config_list.append(config)
         # Register as rllib env
@@ -183,12 +194,12 @@ if __name__ == "__main__":
             "config": {
                 **config
             },
-            "checkpoint_freq": 25,
+            "checkpoint_freq": 10,
             "max_failures": 999,
             "stop": {
-                "training_iteration": 200
+                "training_iteration": 50
             },
-            "num_samples": 1,
+            "num_samples": 6,
         }
         exp_list.append(Experiment.from_json(args.exp_tag, exp_tag))
         
